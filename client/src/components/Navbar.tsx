@@ -16,8 +16,8 @@ import { Menu, X, ChevronDown, Globe, Search } from "lucide-react";
 
 const navLinks = [
   { href: "/", label: "首页", labelEn: "Home", labelJa: "ホーム" },
-  { href: "/articles?category=industry", label: "洞察", labelEn: "Insights", labelJa: "洞察" },
-  { href: "/articles?category=technical", label: "技术", labelEn: "Technical", labelJa: "技術" },
+  { href: "/insights", label: "洞察", labelEn: "Insights", labelJa: "洞察" },
+  { href: "/subscribe", label: "订阅", labelEn: "Subscribe", labelJa: "購読" },
   { href: "/bounties", label: "悬赏", labelEn: "Bounties", labelJa: "懸賞" },
 ];
 

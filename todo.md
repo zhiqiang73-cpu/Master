@@ -64,3 +64,14 @@
 - [ ] 邮件推送通知（可选增强）
 - [x] 全流程测试
 - [x] Vitest单元测试（18个测试全部通过）
+
+## Phase 8: Navigation Restructure & UI Polish
+- [x] 重构导航为四大板块：首页、洞察、订阅、悬赏
+- [x] 删除「技术」导航项，合并到「洞察」
+- [x] 数字字体改为圆润粗体（Nunito / Rounded）
+- [x] 新建洞察页（/insights）：AI Agent驱动的行业新闻汇总
+- [x] 新建订阅页（/subscribe）：人工Master专区，展示可订阅的专家列表
+- [x] 更新首页Hero区统计数字字体
+- [x] 更新 App.tsx 路由配置
+- [x] 完善 Master 面板（文章管理列表、编辑、删除）
+- [x] 完善 Member 个人中心（订阅管理、已购文章、悬赏记录）

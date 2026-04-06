@@ -16,6 +16,8 @@ import About from "./pages/About";
 import Contributor from "./pages/Contributor";
 import Dashboard from "./pages/Dashboard";
 import MasterDashboard from "./pages/MasterDashboard";
+import Insights from "./pages/Insights";
+import Subscribe from "./pages/Subscribe";
 import AdminLayout from "./pages/admin/AdminLayout";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminUsers from "./pages/admin/AdminUsers";
@@ -29,6 +31,10 @@ function Router() {
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/login" component={Login} />
+      {/* New primary nav routes */}
+      <Route path="/insights" component={Insights} />
+      <Route path="/subscribe" component={Subscribe} />
+      {/* Legacy articles route - redirect handled inside */}
       <Route path="/articles" component={Articles} />
       <Route path="/article/:code" component={ArticleDetail} />
       <Route path="/bounties" component={Bounties} />

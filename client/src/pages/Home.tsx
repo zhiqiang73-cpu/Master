@@ -90,7 +90,7 @@ export default function Home() {
                 { value: "3", label: "种语言" },
               ].map((stat, i) => (
                 <div key={i} className="text-center">
-                  <div className="font-display text-2xl font-bold text-[var(--patina)]">{stat.value}</div>
+                  <div className="font-numeric text-3xl font-black text-[var(--patina)]">{stat.value}</div>
                   <div className="text-xs text-muted-foreground mt-0.5">{stat.label}</div>
                 </div>
               ))}
