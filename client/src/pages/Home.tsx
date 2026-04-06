@@ -99,39 +99,57 @@ export default function Home() {
               </div>
             </motion.div>
 
-            {/* Right: JOJO Stand avatars grid */}
+            {/* Right: Stand circular avatars */}
             <motion.div
               initial={{ opacity: 0, x: 30 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.6, delay: 0.2 }}
-              className="relative"
+              className="relative flex flex-col items-center justify-center gap-8"
             >
-              <div className="grid grid-cols-2 gap-3">
-                {STAND_AVATARS.map((url, i) => (
+              {/* Top row: 2 avatars */}
+              <div className="flex gap-8 justify-center">
+                {STAND_AVATARS.slice(0, 2).map((url, i) => (
                   <motion.div
                     key={i}
-                    initial={{ opacity: 0, scale: 0.9 }}
+                    initial={{ opacity: 0, scale: 0.8 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.4, delay: 0.3 + i * 0.1 }}
-                    className="relative group cursor-pointer"
+                    transition={{ duration: 0.4, delay: 0.3 + i * 0.12 }}
+                    className="flex flex-col items-center gap-2 cursor-pointer group"
                     onClick={() => window.location.href = "/stand"}
                   >
-                    <div className="aspect-square rounded-xl overflow-hidden border-2 border-[var(--patina)]/20 group-hover:border-[var(--patina)] transition-all duration-300 shadow-lg">
-                      <img src={url} alt={standNames[i]} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                    <div className="relative">
+                      <div className="w-24 h-24 rounded-full overflow-hidden border-2 border-[var(--patina)]/40 group-hover:border-[var(--patina)] transition-all duration-300 shadow-lg ring-4 ring-[var(--patina)]/10">
+                        <img src={url} alt={standNames[i]} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" />
+                      </div>
+                      <span className="absolute bottom-0 right-0 w-4 h-4 rounded-full bg-green-400 border-2 border-background animate-pulse" />
                     </div>
-                    <div className="absolute bottom-2 left-2 right-2 bg-black/60 backdrop-blur-sm rounded-md px-2 py-1">
-                      <p className="text-white text-xs font-medium truncate">{standNames[i]}</p>
+                    <p className="text-xs font-medium text-muted-foreground group-hover:text-[var(--patina)] transition-colors">{standNames[i]}</p>
+                  </motion.div>
+                ))}
+              </div>
+              {/* Bottom row: 2 avatars */}
+              <div className="flex gap-8 justify-center">
+                {STAND_AVATARS.slice(2, 4).map((url, i) => (
+                  <motion.div
+                    key={i + 2}
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.4, delay: 0.5 + i * 0.12 }}
+                    className="flex flex-col items-center gap-2 cursor-pointer group"
+                    onClick={() => window.location.href = "/stand"}
+                  >
+                    <div className="relative">
+                      <div className="w-24 h-24 rounded-full overflow-hidden border-2 border-[var(--patina)]/40 group-hover:border-[var(--patina)] transition-all duration-300 shadow-lg ring-4 ring-[var(--patina)]/10">
+                        <img src={url} alt={standNames[i + 2]} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" />
+                      </div>
+                      <span className="absolute bottom-0 right-0 w-4 h-4 rounded-full bg-green-400 border-2 border-background animate-pulse" />
                     </div>
-                    {/* Live indicator */}
-                    <div className="absolute top-2 right-2 flex items-center gap-1 bg-black/60 backdrop-blur-sm rounded-full px-2 py-0.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-                      <span className="text-white text-[10px]">LIVE</span>
-                    </div>
+                    <p className="text-xs font-medium text-muted-foreground group-hover:text-[var(--patina)] transition-colors">{standNames[i + 2]}</p>
                   </motion.div>
                 ))}
               </div>
               {/* Decorative glow */}
-              <div className="absolute -inset-4 bg-[var(--patina)]/5 rounded-2xl blur-2xl -z-10" />
+              <div className="absolute -inset-8 bg-[var(--patina)]/5 rounded-full blur-3xl -z-10" />
             </motion.div>
           </div>
         </div>
@@ -247,7 +265,7 @@ export default function Home() {
       </section>
 
       {/* ── Stand Preview ─────────────────────────────────────── */}
-      <section className="py-20">
+      <section className="py-16">
         <div className="container">
           <div className="flex items-center justify-between mb-8">
             <div>
@@ -266,28 +284,24 @@ export default function Home() {
             </Button>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {/* Circular avatar row */}
+          <div className="flex flex-wrap gap-8 justify-center md:justify-start">
             {STAND_AVATARS.map((url, i) => (
               <Link key={i} href="/stand">
                 <motion.div
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  whileInView={{ opacity: 1, scale: 1 }}
+                  initial={{ opacity: 0, y: 10 }}
+                  whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
-                  transition={{ delay: i * 0.05 }}
-                  className="group relative rounded-xl overflow-hidden border border-border hover:border-[var(--patina)] transition-all duration-300 cursor-pointer"
+                  transition={{ delay: i * 0.08 }}
+                  className="flex flex-col items-center gap-2 cursor-pointer group"
                 >
-                  <div className="aspect-square">
-                    <img src={url} alt={standNames[i]} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                  </div>
-                  <div className="p-3 bg-card">
-                    <p className="font-medium text-sm truncate">{standNames[i]}</p>
-                    <div className="flex items-center gap-1 mt-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-                      <span className="text-xs text-muted-foreground">
-                        {lang === "en" ? "Online" : lang === "ja" ? "オンライン" : "在线"}
-                      </span>
+                  <div className="relative">
+                    <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-[var(--patina)]/30 group-hover:border-[var(--patina)] transition-all duration-300 shadow-md ring-2 ring-[var(--patina)]/10">
+                      <img src={url} alt={standNames[i]} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" />
                     </div>
+                    <span className="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full bg-green-400 border-2 border-background animate-pulse" />
                   </div>
+                  <p className="text-xs text-muted-foreground group-hover:text-[var(--patina)] transition-colors font-medium">{standNames[i]}</p>
                 </motion.div>
               </Link>
             ))}
