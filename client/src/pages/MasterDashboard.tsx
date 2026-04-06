@@ -59,7 +59,10 @@ export default function MasterDashboard() {
   });
   const utils = trpc.useUtils();
   const [showEditProfile, setShowEditProfile] = useState(false);
-  const [editProfileForm, setEditProfileForm] = useState({ displayName: "", bio: "", expertise: "" });
+  const [editProfileForm, setEditProfileForm] = useState({
+    displayName: "", bio: "", expertise: "",
+    career: "", hobbies: "", skills: "", background: "", knowledgeTags: "",
+  });
 
   const updateProfileMutation = trpc.masters.updateProfile.useMutation({
     onSuccess: () => {
@@ -475,10 +478,16 @@ export default function MasterDashboard() {
                     <div className="pt-2">
                       <Button variant="outline" size="sm" className="text-xs"
                         onClick={() => {
+                          const p = profile as typeof profile & { career?: string; hobbies?: string[]; skills?: string[]; background?: string; knowledgeTags?: string[] };
                           setEditProfileForm({
-                            displayName: profile.displayName ?? "",
-                            bio: profile.bio ?? "",
-                            expertise: ((profile.expertise as string[]) ?? []).join(", "),
+                            displayName: p.displayName ?? "",
+                            bio: p.bio ?? "",
+                            expertise: ((p.expertise as string[]) ?? []).join(", "),
+                            career: p.career ?? "",
+                            hobbies: (p.hobbies ?? []).join(", "),
+                            skills: (p.skills ?? []).join(", "),
+                            background: p.background ?? "",
+                            knowledgeTags: (p.knowledgeTags ?? []).join(", "),
                           });
                           setShowEditProfile(true);
                         }}>
@@ -644,58 +653,105 @@ export default function MasterDashboard() {
         </DialogContent>
       </Dialog>
 
-      {/* Edit Profile Dialog */}
+      {/* Edit Profile Dialog - 我的画像 */}
       <Dialog open={showEditProfile} onOpenChange={setShowEditProfile}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Edit3 className="w-4 h-4 text-[var(--patina)]" />
-              编辑 Master 资料
+              编辑 Master 画像
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 mt-2">
+          <div className="space-y-5 mt-2">
+            {/* 基本信息 */}
             <div>
-              <Label className="text-xs text-muted-foreground mb-1.5 block">显示名称</Label>
-              <Input
-                placeholder="您的名字"
-                value={editProfileForm.displayName}
-                onChange={e => setEditProfileForm(f => ({ ...f, displayName: e.target.value }))}
-              />
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">基本信息</p>
+              <div className="space-y-3">
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1.5 block">显示名称</Label>
+                  <Input placeholder="您的名字" value={editProfileForm.displayName}
+                    onChange={e => setEditProfileForm(f => ({ ...f, displayName: e.target.value }))} />
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1.5 block">一句话简介</Label>
+                  <Input placeholder="简短介绍您的专业方向，50字以内..."
+                    value={editProfileForm.bio}
+                    onChange={e => setEditProfileForm(f => ({ ...f, bio: e.target.value }))} />
+                </div>
+              </div>
             </div>
+            <Separator />
+            {/* 专业画像 */}
             <div>
-              <Label className="text-xs text-muted-foreground mb-1.5 block">个人简介</Label>
-              <Textarea
-                placeholder="介绍您的专业背景和研究方向..."
-                rows={3}
-                value={editProfileForm.bio}
-                onChange={e => setEditProfileForm(f => ({ ...f, bio: e.target.value }))}
-              />
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">专业画像 · 影响替身方向</p>
+              <div className="space-y-3">
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1.5 block">职业背景 / 工作经历</Label>
+                  <Textarea placeholder="例：10年半导体从业经历，曾任台积电工艺工程师，现为某EDA公司技术顾问..."
+                    rows={3} value={editProfileForm.career}
+                    onChange={e => setEditProfileForm(f => ({ ...f, career: e.target.value }))} />
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1.5 block">擅长领域（逗号分隔）</Label>
+                  <Input placeholder="先进封装, HBM, 碳化硅, EDA工具..."
+                    value={editProfileForm.expertise}
+                    onChange={e => setEditProfileForm(f => ({ ...f, expertise: e.target.value }))} />
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1.5 block">核心技能（逗号分隔）</Label>
+                  <Input placeholder="工艺分析, 市场研究, 竞争情报, 数据建模..."
+                    value={editProfileForm.skills}
+                    onChange={e => setEditProfileForm(f => ({ ...f, skills: e.target.value }))} />
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1.5 block">知识点标签（逗号分隔）</Label>
+                  <Input placeholder="台积电, 英伟达, 出口管制, CoWoS, 3D封装..."
+                    value={editProfileForm.knowledgeTags}
+                    onChange={e => setEditProfileForm(f => ({ ...f, knowledgeTags: e.target.value }))} />
+                  <p className="text-xs text-muted-foreground mt-1">替身会优先关注这些话题</p>
+                </div>
+              </div>
             </div>
+            <Separator />
+            {/* 个人背景 */}
             <div>
-              <Label className="text-xs text-muted-foreground mb-1.5 block">专业领域（逗号分隔）</Label>
-              <Input
-                placeholder="碳化硬, 先进封装, HBM..."
-                value={editProfileForm.expertise}
-                onChange={e => setEditProfileForm(f => ({ ...f, expertise: e.target.value }))}
-              />
-              <p className="text-xs text-muted-foreground mt-1">示例：台积电, 碳化硬, AI芯片, 先进封装</p>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">个人背景</p>
+              <div className="space-y-3">
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1.5 block">兴趣爱好（逗号分隔）</Label>
+                  <Input placeholder="科幻小说, 围棋, 徒步, 摄影..."
+                    value={editProfileForm.hobbies}
+                    onChange={e => setEditProfileForm(f => ({ ...f, hobbies: e.target.value }))} />
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1.5 block">背景故事（可选）</Label>
+                  <Textarea placeholder="您的成长经历、转行故事、或对半导体行业的独特视角..."
+                    rows={3} value={editProfileForm.background}
+                    onChange={e => setEditProfileForm(f => ({ ...f, background: e.target.value }))} />
+                </div>
+              </div>
             </div>
             <div className="flex justify-end gap-3 pt-2">
               <Button variant="outline" onClick={() => setShowEditProfile(false)}>取消</Button>
               <Button
                 className="bg-[var(--patina)] hover:bg-[var(--patina-dark)] text-white gap-1.5"
                 onClick={() => {
-                  const expertise = editProfileForm.expertise.split(",").map(t => t.trim()).filter(Boolean);
+                  const splitTags = (s: string) => s.split(",").map(t => t.trim()).filter(Boolean);
                   updateProfileMutation.mutate({
                     displayName: editProfileForm.displayName || undefined,
                     bio: editProfileForm.bio || undefined,
-                    expertise: expertise.length > 0 ? expertise : undefined,
+                    expertise: splitTags(editProfileForm.expertise),
+                    career: editProfileForm.career || undefined,
+                    hobbies: splitTags(editProfileForm.hobbies),
+                    skills: splitTags(editProfileForm.skills),
+                    background: editProfileForm.background || undefined,
+                    knowledgeTags: splitTags(editProfileForm.knowledgeTags),
                   });
                 }}
                 disabled={updateProfileMutation.isPending}
               >
                 {updateProfileMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                保存修改
+                保存画像
               </Button>
             </div>
           </div>

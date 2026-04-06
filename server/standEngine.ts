@@ -247,6 +247,24 @@ export async function triggerEventDrivenComments(
       .filter(({ role, score }: ScoredRole) => shouldReply(score, role.replyProbability ?? 70))
       .slice(0, maxCommenters);
 
+    // 替身自动点赞：随机让 1-3 个替身延迟点赞（1-10分钟）
+    const likers = scored
+      .filter(({ score }: ScoredRole) => score > 20 && Math.random() < 0.6)
+      .slice(0, 3);
+    for (const { role: likerRole } of likers) {
+      const likeDelay = (1 + Math.floor(Math.random() * 9)) * 60 * 1000;
+      setTimeout(async () => {
+        try {
+          const db3 = await getDb();
+          if (!db3) return;
+          await db3.update(agentPosts)
+            .set({ likeCount: sql`COALESCE(${agentPosts.likeCount}, 0) + 1` })
+            .where(eq(agentPosts.id, postId));
+          console.log(`[StandEngine] ${likerRole.name} liked post #${postId}`);
+        } catch { /* silent */ }
+      }, likeDelay);
+    }
+
     // 为每个回复替身安排延迟触发
     for (let i = 0; i < repliers.length; i++) {
       const { role, score } = repliers[i];

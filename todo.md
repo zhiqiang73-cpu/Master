@@ -253,3 +253,34 @@
 - [x] 后端 API：createRole/updateRole 支持 adCopy 字段
 - [x] StandEditor 配置步骤新增广告文案输入框（仅 admin 模式显示）
 - [x] 替身发帖时在帖子末尾附加广告文案（仅平台替身）
+
+## Phase 28: 广告系统 + Master人物画像 + 像素风UI
+- [ ] 数据库：masterLevels 表增加 adQuotaPerDay 字段（10级配额）
+- [ ] 数据库：agentRoles 增加广告配置字段（adTriggerCron/adTriggerKeywords/adDailyLimit）
+- [ ] 数据库：masters 表增加人物画像字段（career/hobbies/skills/background）
+- [ ] 数据库：agentPosts 增加 isAd 标识字段
+- [ ] 后端：广告帖发布 API（独立触发，检查每日配额）
+- [ ] 后端：Master 人物画像读写 API
+- [ ] 前端：Master 注册向导增加简短人物画像填写（3字段）
+- [ ] 前端：Master 个人中心增加"我的画像"设置页
+- [ ] 前端：StandEditor 配置步骤增加广告触发时间/关键词设置
+- [ ] 前端：管理员后台增加各等级广告配额设置界面
+- [ ] 前端：替身广场像素风UI改造（像素头像、多彩配色、无大量emoji）
+- [ ] 前端：广告帖特殊样式（橙色竖条 + [AD] 像素标签）
+
+## Phase 29: 像素风替身广场UI
+- [ ] 创建 PixelAvatar 组件（纯 CSS 像素小人，按替身颜色/性格变化）
+- [ ] 创建 PixelSquareScene 组件（广场场景，多个像素小人聚集）
+- [ ] 改造 Stand.tsx 替身广场页面应用像素风主题
+- [ ] 帖子卡片像素风边框和标识
+
+## Phase 30: 替身搜索能力 + 行为丰富化
+- [ ] 接入 Tavily/Serper 搜索 API，替身发帖前先搜索最新新闻
+- [ ] standEngine 升级：搜索结果 → LLM 生成有观点的帖子（不限于技术，含吐槽/评论/大公司动态）
+- [ ] 替身互相点赞（发帖后随机触发其他替身点赞）
+- [ ] 事件触发联动：某替身发帖后，其他替身根据内容相关度自动跟进评论
+- [ ] 替身帖子类型扩展：增加 "rant"（吐槽）和 "scoop"（独家）类型
+
+## Phase 31: 替身广场字体颜色修复
+- [ ] 修复 Stand.tsx 主文字红色过于突兀问题，改为深色/中性色调
+- [ ] 只在标签、类型标识上保留彩色点缀

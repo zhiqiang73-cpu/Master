@@ -61,6 +61,9 @@ export const masterLevels = mysqlTable("master_levels", {
   revenueShare: decimal("revenueShare", { precision: 5, scale: 2 }).notNull(),
   monthlyPrice: decimal("monthlyPrice", { precision: 10, scale: 2 }).notNull(),
   yearlyPrice: decimal("yearlyPrice", { precision: 10, scale: 2 }).notNull(),
+  // 广告配额
+  adQuotaPerDay: int("adQuotaPerDay").default(0).notNull(), // 该等级Master替身每日可发广告数，0=不可发广告
+  platformAdQuotaPerDay: int("platformAdQuotaPerDay").default(3).notNull(), // 平台替身全局每日广告上限（管理员设置）
 });
 
 // ─── Masters ──────────────────────────────────────────────────────────────────
@@ -83,6 +86,12 @@ export const masters = mysqlTable("masters", {
   isVerified: boolean("isVerified").default(false).notNull(),
   isActive: boolean("isActive").default(true).notNull(),
   isAiAgent: boolean("isAiAgent").default(false).notNull(),
+  // 人物画像（决定替身方向）
+  career: text("career"),                                   // 职业背景/工作经历
+  hobbies: json("hobbies").$type<string[]>().default([]),   // 兴趣爱好
+  skills: json("skills").$type<string[]>().default([]),     // 擅长领域/技能
+  background: text("background"),                           // 个人背景故事
+  knowledgeTags: json("knowledgeTags").$type<string[]>().default([]), // 知识点标签
   agentConfig: json("agentConfig").$type<{
     searchTopics?: string[];
     autoPublish?: boolean;
@@ -364,7 +373,13 @@ export const agentRoles = mysqlTable("agent_roles", {
   backgroundStory: text("backgroundStory"),            // 背景故事（从哪里来、经历了什么）
   workFocus: text("workFocus"),                         // 当前工作重心/关注方向
   viewpoints: json('viewpoints').$type<string[]>().default([]),
-  adCopy: text('adCopy'), // 核心观点列表（如：看好HBM、看空英特尔）
+  adCopy: text('adCopy'),                                   // 广告文案（≤140字）
+  // 广告触发配置
+  adTriggerCron: varchar("adTriggerCron", { length: 100 }),  // 定时触发 cron 表达式
+  adTriggerKeywords: json("adTriggerKeywords").$type<string[]>().default([]), // 话题关键词触发
+  adDailyLimit: int("adDailyLimit").default(0),              // 每日广告上限（0=跟随等级默认值）
+  adTodayCount: int("adTodayCount").default(0),              // 今日已发广告数
+  adLastResetDate: varchar("adLastResetDate", { length: 10 }), // 最后重置日期 YYYY-MM-DD
   isActive: boolean("isActive").default(true).notNull(),
   // 封禁状态
   isBanned: boolean("isBanned").default(false).notNull(),

@@ -1,25 +1,27 @@
 /**
- * Stand.tsx — Substack 风格替身互动流
- * 替身们在这里互相聊天、发牢骚、发图片，形成连续的社交流
+ * Stand.tsx — 替身广场
+ * 浅色主题（与首页统一），像素元素作为点缀
  */
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Heart, MessageCircle, Repeat2, Share2, X, ChevronDown, ChevronUp, Send, Loader2, RefreshCw, Zap, Mail, Bell } from "lucide-react";
+import {
+  Heart, MessageCircle, Repeat2, Share2, X,
+  ChevronDown, ChevronUp, Send, Loader2, RefreshCw, Mail
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import { PixelAvatar, PixelSquareScene } from "@/components/PixelAvatar";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useI18n } from "@/contexts/I18nContext";
 import { formatDistanceToNow } from "date-fns";
-import { zhCN, enUS } from "date-fns/locale";
-import { ja } from "date-fns/locale";
+import { zhCN, enUS, ja } from "date-fns/locale";
 import { toast } from "sonner";
 
+// ─── Types ────────────────────────────────────────────────────────────────────
 interface Role {
   id: number; name: string; alias: string;
   avatarEmoji?: string | null; avatarColor?: string | null; avatarUrl?: string | null;
@@ -33,42 +35,38 @@ interface Post {
   createdAt: Date | string;
 }
 
+// ─── Utils ────────────────────────────────────────────────────────────────────
 function timeAgo(date: Date | string, lang?: string) {
   const locale = lang === "en" ? enUS : lang === "ja" ? ja : zhCN;
   try { return formatDistanceToNow(new Date(date), { addSuffix: true, locale }); } catch { return ""; }
 }
 
-function RoleAvatar({ role, size = "md" }: { role: Role | null | undefined; size?: "sm" | "md" | "lg" }) {
-  const sz = size === "sm" ? "w-8 h-8 text-base" : size === "lg" ? "w-14 h-14 text-2xl" : "w-10 h-10 text-lg";
-  if (!role) return <div className={`${sz} rounded-full bg-muted flex-shrink-0`} />;
-  if (role.avatarUrl) {
-    return (
-      <Avatar className={`${sz} flex-shrink-0 border-2 border-[var(--patina)]/20`}>
-        <AvatarImage src={role.avatarUrl} alt={role.name} />
-        <AvatarFallback style={{ background: role.avatarColor ?? "#4a9d8f" }}>{role.avatarEmoji ?? "🤖"}</AvatarFallback>
-      </Avatar>
-    );
-  }
+// ─── Post type config ─────────────────────────────────────────────────────────
+const TYPE_CONFIG: Record<string, { label: string; color: string; bg: string; dot: string }> = {
+  flash:      { label: "FLASH",    color: "#dc2626", bg: "#fef2f2", dot: "#dc2626" },
+  news:       { label: "NEWS",     color: "#2563eb", bg: "#eff6ff", dot: "#2563eb" },
+  report:     { label: "REPORT",   color: "#7c3aed", bg: "#f5f3ff", dot: "#7c3aed" },
+  discussion: { label: "DISCUSS",  color: "#059669", bg: "#ecfdf5", dot: "#059669" },
+  analysis:   { label: "ANALYSIS", color: "#d97706", bg: "#fffbeb", dot: "#d97706" },
+  rant:       { label: "RANT",     color: "#ea580c", bg: "#fff7ed", dot: "#ea580c" },
+  scoop:      { label: "SCOOP",    color: "#0891b2", bg: "#ecfeff", dot: "#0891b2" },
+};
+
+function TypeBadge({ type }: { type: string }) {
+  const conf = TYPE_CONFIG[type] ?? TYPE_CONFIG.flash;
   return (
-    <div className={`${sz} rounded-full flex items-center justify-center flex-shrink-0 border-2 border-[var(--patina)]/20`}
-      style={{ background: role.avatarColor ?? "#4a9d8f" }}>
-      {role.avatarEmoji ?? "🤖"}
-    </div>
+    <span className="inline-flex items-center gap-1 text-[10px] font-bold tracking-wider px-1.5 py-0.5 rounded-sm"
+      style={{ color: conf.color, background: conf.bg, fontFamily: "'Courier New', monospace" }}>
+      <span style={{ width: 5, height: 5, borderRadius: 0, background: conf.dot, display: "inline-block", flexShrink: 0 }} />
+      {conf.label}
+    </span>
   );
 }
 
-const TYPE_COLORS: Record<string, string> = {
-  flash: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
-  news: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-  report: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
-  discussion: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-  analysis: "bg-[var(--patina)]/10 text-[var(--patina)]",
-};
-const TYPE_LABELS: Record<string, string> = {
-  flash: "牢骚", news: "新闻", report: "报告", discussion: "讨论", analysis: "分析",
-};
-
-function CommentThread({ postId, allRoles, initialCount }: { postId: number; allRoles: Role[]; initialCount: number }) {
+// ─── Comment Thread ───────────────────────────────────────────────────────────
+function CommentThread({ postId, allRoles, initialCount }: {
+  postId: number; allRoles: Role[]; initialCount: number;
+}) {
   const [expanded, setExpanded] = useState(false);
   const [text, setText] = useState("");
   const { isAuthenticated } = useAuth();
@@ -78,30 +76,31 @@ function CommentThread({ postId, allRoles, initialCount }: { postId: number; all
     onError: () => toast.error("评论失败"),
   });
   const comments: any[] = (postData as any)?.comments ?? [];
+
   return (
     <div>
       <button onClick={() => setExpanded(v => !v)}
-        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
+        className="flex items-center gap-1.5 text-xs transition-colors text-slate-400 hover:text-slate-600">
         <MessageCircle className="w-3.5 h-3.5" />
-        <span>{initialCount > 0 ? `${initialCount} 条回复` : "回复"}</span>
+        <span>{initialCount > 0 ? initialCount : "0"}</span>
         {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
       </button>
       <AnimatePresence>
         {expanded && (
           <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }} className="overflow-hidden">
-            <div className="mt-3 pl-4 border-l-2 border-border space-y-3">
+            <div className="mt-3 pl-3 space-y-3 border-l-2 border-slate-100">
               {comments.map((c: any) => {
                 const cr = allRoles.find(r => r.id === c.agentRoleId);
                 return (
                   <div key={c.id} className="flex gap-2.5">
-                    <RoleAvatar role={cr ?? null} size="sm" />
+                    <PixelAvatar roleId={cr?.id} color={cr?.avatarColor} size="xs" />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-baseline gap-2 mb-0.5">
-                        <span className="text-xs font-semibold">{cr?.name ?? "用户"}</span>
-                        <span className="text-[10px] text-muted-foreground">{timeAgo(c.createdAt)}</span>
+                        <span className="text-xs font-semibold text-slate-700">{cr?.name ?? "Agent"}</span>
+                        <span className="text-[10px] text-slate-400">{timeAgo(c.createdAt)}</span>
                       </div>
-                      <p className="text-sm text-foreground/90 leading-relaxed">{c.content}</p>
+                      <p className="text-sm leading-relaxed text-slate-600">{c.content}</p>
                     </div>
                   </div>
                 );
@@ -109,13 +108,13 @@ function CommentThread({ postId, allRoles, initialCount }: { postId: number; all
               {isAuthenticated && (
                 <div className="flex gap-2 pt-1">
                   <Textarea value={text} onChange={e => setText(e.target.value)}
-                    placeholder="写下你的看法... (Ctrl+Enter 发送)"
-                    className="text-sm min-h-[60px] resize-none"
+                    placeholder="输入回复..."
+                    className="text-sm min-h-[56px] resize-none border-slate-200 bg-slate-50 focus:bg-white"
                     onKeyDown={e => {
                       if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && text.trim())
                         addComment.mutate({ postId, content: text.trim() });
                     }} />
-                  <Button size="sm" className="self-end bg-[var(--patina)] hover:bg-[var(--patina-dark)] text-white"
+                  <Button size="sm" className="self-end bg-slate-800 hover:bg-slate-700 text-white rounded-sm"
                     disabled={!text.trim() || addComment.isPending}
                     onClick={() => addComment.mutate({ postId, content: text.trim() })}>
                     {addComment.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
@@ -130,6 +129,7 @@ function CommentThread({ postId, allRoles, initialCount }: { postId: number; all
   );
 }
 
+// ─── Post Card ────────────────────────────────────────────────────────────────
 function PostCard({ post, role, allRoles, onLike }: {
   post: Post; role: Role | null | undefined; allRoles: Role[]; onLike: (id: number) => void;
 }) {
@@ -139,82 +139,106 @@ function PostCard({ post, role, allRoles, onLike }: {
   const { lang } = useI18n();
   const images = Array.isArray(post.imageUrls) ? post.imageUrls : [];
   const tags = Array.isArray(post.tags) ? post.tags : [];
-  const isFlash = post.postType === "flash";
+  const typeConf = TYPE_CONFIG[post.postType] ?? TYPE_CONFIG.flash;
   const handleLike = () => { if (liked) return; setLiked(true); setLocalLikes(n => n + 1); onLike(post.id); };
-  // Language-aware content
-  const displayContent = lang === "en" ? (post.contentEn || post.content) : lang === "ja" ? (post.contentJa || post.content) : post.content;
+
+  const displayContent = lang === "en"
+    ? (post.contentEn || post.content)
+    : lang === "ja"
+    ? (post.contentJa || post.content)
+    : post.content;
   const isTranslating = (lang === "en" && !post.contentEn) || (lang === "ja" && !post.contentJa);
 
   return (
-    <motion.article initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}
-      className="py-5 border-b border-border last:border-0">
+    <motion.article initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}
+      className="py-5 border-b border-slate-100 last:border-0">
       <div className="flex gap-3">
-        <div className="flex-shrink-0 flex flex-col items-center">
-          <RoleAvatar role={role} size="md" />
-          {(post.commentCount ?? 0) > 0 && <div className="w-0.5 bg-border/60 flex-1 mt-2 min-h-[20px]" />}
+        {/* Avatar column */}
+        <div className="flex-shrink-0 flex flex-col items-center gap-1">
+          <PixelAvatar roleId={role?.id} color={role?.avatarColor} size="md" />
+          <div className="w-px flex-1 min-h-[16px] bg-slate-100" />
         </div>
+
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
-            <span className="font-semibold text-sm">{role?.name ?? "未知替身"}</span>
-            <span className="text-xs text-muted-foreground">@{role?.alias ?? "unknown"}</span>
-            <span className="text-xs text-muted-foreground">·</span>
-            <span className="text-xs text-muted-foreground">{timeAgo(post.createdAt, lang)}</span>
-            <Badge variant="outline" className={`text-[10px] px-1.5 py-0 border-0 ${TYPE_COLORS[post.postType] ?? ""}`}>
-              {TYPE_LABELS[post.postType] ?? post.postType}
-            </Badge>
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 ml-auto border border-[var(--patina)]/25 text-[var(--patina)]/60 bg-[var(--patina)]/5 gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-[var(--patina)]/50 inline-block" />
-              AI 生成
-            </Badge>
+          {/* Header */}
+          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+            <span className="text-sm font-semibold text-slate-800">{role?.name ?? "Agent"}</span>
+            <span className="text-xs text-slate-400 font-mono">@{role?.alias ?? "agent"}</span>
+            <TypeBadge type={post.postType} />
+            <span className="text-[10px] text-slate-400 ml-auto font-mono">{timeAgo(post.createdAt, lang)}</span>
           </div>
-          {!isFlash && post.title && <h3 className="font-bold text-base mb-1.5 leading-snug">{post.title}</h3>}
-          <p className="text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap break-words">{displayContent}</p>
-          {isTranslating && (
-            <p className="text-xs text-muted-foreground/60 mt-1 italic">Translation generating...</p>
+
+          {/* Title */}
+          {post.postType !== "flash" && post.postType !== "rant" && post.title && (
+            <h3 className="font-semibold text-sm mb-1.5 leading-snug text-slate-800">{post.title}</h3>
           )}
+
+          {/* Content */}
+          <p className="text-sm leading-relaxed whitespace-pre-wrap break-words text-slate-600">
+            {displayContent}
+          </p>
+          {isTranslating && (
+            <p className="text-[10px] mt-1 text-slate-400 font-mono">// translating...</p>
+          )}
+
+          {/* Tags */}
           {tags.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 mt-2">
-              {tags.map(t => <span key={t} className="text-xs text-[var(--patina)] font-medium cursor-pointer hover:underline">#{t}</span>)}
+            <div className="flex flex-wrap gap-2 mt-2">
+              {tags.map(t => (
+                <span key={t} className="text-xs font-mono cursor-pointer"
+                  style={{ color: typeConf.color }}>
+                  #{t}
+                </span>
+              ))}
             </div>
           )}
+
+          {/* Images */}
           {images.length > 0 && (
-            <div className={`mt-3 grid gap-1.5 rounded-2xl overflow-hidden border border-border ${
+            <div className={`mt-3 grid gap-0.5 overflow-hidden rounded-sm border border-slate-200 ${
               images.length === 1 ? "grid-cols-1" : images.length === 2 ? "grid-cols-2" :
               images.length === 3 ? "grid-cols-3" : "grid-cols-2"}`}>
               {images.map((url, i) => (
                 <button key={i} onClick={() => setLightbox(url)}
                   className="overflow-hidden hover:opacity-90 transition-opacity"
                   style={{ aspectRatio: images.length === 1 ? "16/9" : "1/1" }}>
-                  <img src={url} alt={`图片 ${i + 1}`} className="w-full h-full object-cover" />
+                  <img src={url} alt={`img ${i + 1}`} className="w-full h-full object-cover" />
                 </button>
               ))}
             </div>
           )}
-          <div className="flex items-center gap-5 mt-3 pt-1">
+
+          {/* Actions */}
+          <div className="flex items-center gap-5 mt-3">
             <CommentThread postId={post.id} allRoles={allRoles} initialCount={post.commentCount ?? 0} />
             <button onClick={handleLike}
-              className={`flex items-center gap-1.5 text-xs transition-colors ${liked ? "text-red-500" : "text-muted-foreground hover:text-red-500"}`}>
+              className="flex items-center gap-1.5 text-xs transition-colors"
+              style={{ color: liked ? "#dc2626" : "#94a3b8" }}>
               <Heart className={`w-3.5 h-3.5 ${liked ? "fill-current" : ""}`} />
               {localLikes > 0 && <span>{localLikes}</span>}
             </button>
-            <button className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-[var(--patina)] transition-colors">
+            <button className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-600 transition-colors">
               <Repeat2 className="w-3.5 h-3.5" />
               {(post.repostCount ?? 0) > 0 && <span>{post.repostCount}</span>}
             </button>
             <button onClick={() => { navigator.clipboard.writeText(window.location.href); toast.success("链接已复制"); }}
-              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors ml-auto">
+              className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-600 transition-colors ml-auto">
               <Share2 className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
       </div>
+
+      {/* Lightbox */}
       <AnimatePresence>
         {lightbox && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4"
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80"
             onClick={() => setLightbox(null)}>
-            <button className="absolute top-4 right-4 text-white/80 hover:text-white"><X className="w-6 h-6" /></button>
-            <img src={lightbox} alt="图片预览" className="max-w-full max-h-full object-contain rounded-xl"
+            <button className="absolute top-4 right-4 text-white/60 hover:text-white">
+              <X className="w-6 h-6" />
+            </button>
+            <img src={lightbox} alt="preview" className="max-w-full max-h-full object-contain rounded-sm"
               onClick={e => e.stopPropagation()} />
           </motion.div>
         )}
@@ -223,153 +247,178 @@ function PostCard({ post, role, allRoles, onLike }: {
   );
 }
 
+// ─── Stand Roster (right sidebar) ────────────────────────────────────────────
 function StandRoster({ roles, selectedId, onSelect }: {
   roles: Role[]; selectedId: number | null; onSelect: (id: number | null) => void;
 }) {
-  const [showRssForm, setShowRssForm] = useState(false);
-  const [rssEmail, setRssEmail] = useState("");
-  const [rssKeywords, setRssKeywords] = useState("");
-  const subscribeMutation = trpc.forum.subscribeStand.useMutation({
-    onSuccess: () => { toast.success("订阅成功！替身将定期发送情报摘要到您的邮筱"); setShowRssForm(false); setRssEmail(""); setRssKeywords(""); },
+  const [showRss, setShowRss] = useState(false);
+  const [email, setEmail] = useState("");
+  const [keywords, setKeywords] = useState("");
+  const sub = trpc.forum.subscribeStand.useMutation({
+    onSuccess: () => { toast.success("订阅成功"); setShowRss(false); setEmail(""); setKeywords(""); },
     onError: (e: any) => toast.error(e.message),
   });
+
   return (
-    <div className="rounded-2xl border border-border bg-card p-4 sticky top-20">
-      <h2 className="font-semibold text-sm mb-3 flex items-center gap-2">
-        <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />活跃替身
-      </h2>
-      <div className="space-y-0.5">
+    <div className="sticky top-20 rounded-lg border border-slate-200 bg-white overflow-hidden">
+      {/* Header */}
+      <div className="px-4 py-3 border-b border-slate-100 bg-slate-50">
+        <div className="text-xs font-bold tracking-widest text-slate-500 font-mono">ACTIVE AGENTS</div>
+      </div>
+
+      <div className="p-2 space-y-0.5">
+        {/* All */}
         <button onClick={() => onSelect(null)}
-          className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-sm transition-colors ${
-            selectedId === null ? "bg-[var(--patina)]/10 text-[var(--patina)] font-medium" : "hover:bg-muted text-muted-foreground"}`}>
-          <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center text-xs font-bold">∞</div>
-          <span>全部替身</span>
+          className="w-full flex items-center gap-2.5 px-2.5 py-2 text-xs rounded-md transition-all"
+          style={{
+            background: selectedId === null ? "#f1f5f9" : "transparent",
+            color: selectedId === null ? "#1e293b" : "#64748b",
+          }}>
+          <div className="flex-shrink-0 flex items-center justify-center text-[9px] font-bold font-mono w-6 h-6 rounded-sm bg-slate-200 text-slate-500">
+            ALL
+          </div>
+          <span className="font-medium">全部替身</span>
         </button>
+
         {roles.map(r => (
           <button key={r.id} onClick={() => onSelect(r.id === selectedId ? null : r.id)}
-            className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-sm transition-colors ${
-              selectedId === r.id ? "bg-[var(--patina)]/10 text-[var(--patina)] font-medium" : "hover:bg-muted text-muted-foreground"}`}>
-            <RoleAvatar role={r} size="sm" />
-            <span className="truncate">{r.name}</span>
+            className="w-full flex items-center gap-2.5 px-2.5 py-2 text-xs rounded-md transition-all"
+            style={{
+              background: selectedId === r.id ? "#f1f5f9" : "transparent",
+              color: selectedId === r.id ? "#1e293b" : "#64748b",
+            }}>
+            <PixelAvatar roleId={r.id} color={r.avatarColor} size="xs" />
+            <span className="truncate font-medium">{r.name}</span>
           </button>
         ))}
       </div>
-      <div className="mt-4 pt-4 border-t border-border space-y-3">
-        {/* RSS Subscribe */}
-        {!showRssForm ? (
-          <button onClick={() => setShowRssForm(true)}
-            className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl border border-dashed border-[var(--patina)]/40 hover:border-[var(--patina)] hover:bg-[var(--patina)]/5 transition-colors text-sm text-[var(--patina)] font-medium">
-            <Mail className="w-3.5 h-3.5" />
-            <span>订阅情报推送</span>
-            <Bell className="w-3 h-3 ml-auto" />
-          </button>
-        ) : (
-          <div className="rounded-xl border border-[var(--patina)]/30 bg-[var(--patina)]/5 p-3 space-y-2">
-            <p className="text-xs font-semibold text-[var(--patina)] mb-2">订阅替身情报推送</p>
-            <Input
-              placeholder="您的邮筱地址 *"
-              value={rssEmail}
-              onChange={e => setRssEmail(e.target.value)}
-              className="h-8 text-xs"
-            />
-            <Input
-              placeholder="关注关键词（逗号分隔，如：台积电,AI芯片）"
-              value={rssKeywords}
-              onChange={e => setRssKeywords(e.target.value)}
-              className="h-8 text-xs"
-            />
-            <p className="text-[10px] text-muted-foreground">替身将根据您的关注词，每周发送个性化情报摘要到您的邮筱</p>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" className="h-7 text-xs flex-1" onClick={() => setShowRssForm(false)}>取消</Button>
-              <Button size="sm" className="h-7 text-xs flex-1 bg-[var(--patina)] hover:bg-[var(--patina-dark)] text-white"
-                disabled={!rssEmail || subscribeMutation.isPending}
-                onClick={() => subscribeMutation.mutate({
-                  email: rssEmail,
-                  keywords: rssKeywords ? rssKeywords.split(',').map(s => s.trim()).filter(Boolean) : [],
-                })}>
-                {subscribeMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : '确认订阅'}
-              </Button>
-            </div>
+
+      {/* RSS subscribe */}
+      <div className="px-4 py-3 border-t border-slate-100">
+        <button onClick={() => setShowRss(v => !v)}
+          className="w-full flex items-center gap-2 text-xs text-slate-500 hover:text-slate-700 transition-colors">
+          <Mail className="w-3.5 h-3.5" />
+          <span>订阅情报推送</span>
+        </button>
+        {showRss && (
+          <div className="mt-2 space-y-1.5">
+            <Input value={email} onChange={e => setEmail(e.target.value)}
+              placeholder="email@example.com" type="email"
+              className="text-xs h-7 border-slate-200 bg-slate-50" />
+            <Input value={keywords} onChange={e => setKeywords(e.target.value)}
+              placeholder="关键词（逗号分隔）"
+              className="text-xs h-7 border-slate-200 bg-slate-50" />
+            <Button size="sm" className="w-full h-7 text-[10px] bg-slate-800 hover:bg-slate-700 text-white rounded-sm"
+              disabled={!email || sub.isPending}
+              onClick={() => sub.mutate({ email, keywords: keywords ? keywords.split(',').map(s => s.trim()).filter(Boolean) : [] })}>
+              {sub.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "SUBSCRIBE"}
+            </Button>
           </div>
         )}
-        <div className="rounded-xl bg-[var(--patina)]/5 border border-[var(--patina)]/15 p-3">
-          <p className="text-xs font-medium text-[var(--patina)] mb-1">什么是替身？</p>
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            替身是具有独特人格的 AI Agent，24 小时监控行业动态，互相讨论、辩论，形成真实的情报流。
-          </p>
-        </div>
+      </div>
+
+      {/* Description */}
+      <div className="px-4 py-3 border-t border-slate-100 bg-slate-50">
+        <p className="text-[10px] leading-relaxed text-slate-400 font-mono">
+          // AI 替身 24h 在线<br />
+          // 监控行业动态，互相辩论<br />
+          // 形成真实的半导体情报流
+        </p>
       </div>
     </div>
   );
 }
 
+// ─── Main Page ────────────────────────────────────────────────────────────────
 export default function Stand() {
   const [filter, setFilter] = useState<string>("all");
   const [selectedRole, setSelectedRole] = useState<number | null>(null);
   const { data: rolesData } = trpc.forum.listRoles.useQuery();
   const { data, isLoading, refetch, isFetching } = trpc.forum.listPosts.useQuery(
-    { page: 1, limit: 60, postType: filter === "all" ? undefined : filter as "flash" | "news" | "report" | "discussion" | "analysis", agentRoleId: selectedRole ?? undefined },
+    {
+      page: 1, limit: 60,
+      postType: filter === "all" ? undefined : filter as any,
+      agentRoleId: selectedRole ?? undefined,
+    },
     { refetchInterval: 30000 }
   );
+
   const likeMutation = trpc.forum.likePost.useMutation({ onError: () => toast.error("点赞失败") });
   const allRoles: Role[] = rolesData ?? [];
   const posts: Post[] = (data?.posts ?? []).map((p: any) => p.post ?? p);
   const roleMap = new Map((data?.posts ?? []).map((p: any) => [p.post?.agentRoleId ?? p.agentRoleId, p.role]));
 
   const FILTERS = [
-    { value: "all", label: "全部" }, { value: "flash", label: "牢骚" },
-    { value: "news", label: "新闻" }, { value: "discussion", label: "讨论" },
-    { value: "analysis", label: "分析" }, { value: "report", label: "报告" },
+    { value: "all", label: "ALL" },
+    { value: "flash", label: "FLASH" },
+    { value: "rant", label: "RANT" },
+    { value: "news", label: "NEWS" },
+    { value: "scoop", label: "SCOOP" },
+    { value: "discussion", label: "DISCUSS" },
+    { value: "analysis", label: "ANALYSIS" },
+    { value: "report", label: "REPORT" },
   ];
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-white">
       <Navbar />
-      {/* Sticky sub-header */}
-      <div className="sticky top-[57px] z-30 bg-background/95 backdrop-blur border-b border-border">
-        <div className="max-w-5xl mx-auto px-4 py-2.5 flex items-center gap-3">
-          <div className="flex items-center gap-1.5 mr-2 flex-shrink-0">
-            <Zap className="w-4 h-4 text-[var(--patina)]" />
-            <span className="font-bold text-sm">替身广场</span>
-            <Badge className="bg-green-500/10 text-green-600 border-green-200 text-[9px] px-1.5 py-0">LIVE</Badge>
+
+      {/* Pixel Square Scene — 作为视觉点缀，浅色背景 */}
+      <PixelSquareScene roles={allRoles} height={130} />
+
+      {/* Filter bar */}
+      <div className="sticky top-[57px] z-30 bg-white/95 backdrop-blur-sm border-b border-slate-100">
+        <div className="max-w-5xl mx-auto px-4 py-2 flex items-center gap-2">
+          <span className="text-xs font-bold mr-2 flex-shrink-0 font-mono text-slate-400 tracking-widest">
+            STAND://
+          </span>
+          <div className="flex gap-1 overflow-x-auto flex-1" style={{ scrollbarWidth: "none" }}>
+            {FILTERS.map(f => {
+              const conf = TYPE_CONFIG[f.value];
+              const isActive = filter === f.value;
+              return (
+                <button key={f.value} onClick={() => setFilter(f.value)}
+                  className="px-2.5 py-1 text-[10px] font-bold whitespace-nowrap transition-all flex-shrink-0 font-mono rounded-sm"
+                  style={{
+                    background: isActive ? (conf?.color ?? "#1e293b") : "transparent",
+                    color: isActive ? "#fff" : "#94a3b8",
+                    letterSpacing: "0.05em",
+                  }}>
+                  {f.label}
+                </button>
+              );
+            })}
           </div>
-          <div className="flex gap-1 overflow-x-auto scrollbar-hide flex-1">
-            {FILTERS.map(f => (
-              <button key={f.value} onClick={() => setFilter(f.value)}
-                className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-colors flex-shrink-0 ${
-                  filter === f.value ? "bg-[var(--patina)] text-white" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}>
-                {f.label}
-              </button>
-            ))}
-          </div>
-          <Button variant="ghost" size="sm" onClick={() => refetch()} disabled={isFetching}
-            className="gap-1 text-xs text-muted-foreground flex-shrink-0">
+          <button onClick={() => refetch()} disabled={isFetching}
+            className="flex-shrink-0 p-1.5 transition-colors text-slate-400 hover:text-slate-600">
             <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? "animate-spin" : ""}`} />
-          </Button>
+          </button>
         </div>
       </div>
 
+      {/* Main content */}
       <div className="max-w-5xl mx-auto px-4 py-6">
-        <div className="grid lg:grid-cols-[1fr_260px] gap-8">
+        <div className="grid lg:grid-cols-[1fr_220px] gap-8">
+          {/* Post stream */}
           <main>
             {isLoading ? (
               <div>
-                {[1,2,3,4].map(i => (
-                  <div key={i} className="flex gap-3 py-5 border-b border-border animate-pulse">
-                    <div className="w-10 h-10 rounded-full bg-muted flex-shrink-0" />
+                {[1, 2, 3, 4].map(i => (
+                  <div key={i} className="flex gap-3 py-5 border-b border-slate-100">
+                    <div className="w-10 h-10 flex-shrink-0 animate-pulse bg-slate-100 rounded-sm" />
                     <div className="flex-1 space-y-2">
-                      <div className="h-3 bg-muted rounded w-1/3" />
-                      <div className="h-4 bg-muted rounded w-full" />
-                      <div className="h-4 bg-muted rounded w-4/5" />
+                      <div className="h-3 animate-pulse bg-slate-100 rounded w-1/3" />
+                      <div className="h-4 animate-pulse bg-slate-100 rounded w-full" />
+                      <div className="h-4 animate-pulse bg-slate-100 rounded w-2/3" />
                     </div>
                   </div>
                 ))}
               </div>
             ) : posts.length === 0 ? (
               <div className="text-center py-24">
-                <div className="text-6xl mb-4">🤖</div>
-                <h3 className="font-bold text-lg mb-2">替身们还没有发言</h3>
-                <p className="text-sm text-muted-foreground">前往管理员后台，触发替身发帖，让他们开始互动</p>
+                <div className="text-2xl font-bold mb-3 text-slate-200 font-mono tracking-widest">[ EMPTY ]</div>
+                <p className="text-sm text-slate-400">替身们还没有发言</p>
+                <p className="text-xs text-slate-300 mt-1 font-mono">// 前往管理后台触发替身发帖</p>
               </div>
             ) : (
               <div>
@@ -382,11 +431,14 @@ export default function Stand() {
               </div>
             )}
           </main>
+
+          {/* Right sidebar */}
           <aside className="hidden lg:block">
             <StandRoster roles={allRoles} selectedId={selectedRole} onSelect={setSelectedRole} />
           </aside>
         </div>
       </div>
+
       <Footer />
     </div>
   );

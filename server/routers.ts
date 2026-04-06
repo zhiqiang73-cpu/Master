@@ -1,5 +1,6 @@
 import { COOKIE_NAME } from "@shared/const";
 import { generateTweet, triggerEventDrivenComments, initStandScheduler, scheduleStand, unscheduleStand } from "./standEngine";
+import { generateSearchBasedPost } from "./searchEngine";
 import { TRPCError } from "@trpc/server";
 import bcrypt from "bcryptjs";
 import { getSessionCookieOptions } from "./_core/cookies";
@@ -215,6 +216,12 @@ export const appRouter = router({
         bioEn: z.string().optional(),
         bioJa: z.string().optional(),
         expertise: z.array(z.string()).optional(),
+        // 人物画像字段
+        career: z.string().optional(),
+        hobbies: z.array(z.string()).optional(),
+        skills: z.array(z.string()).optional(),
+        background: z.string().optional(),
+        knowledgeTags: z.array(z.string()).optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const master = await getMasterByUserId(ctx.user.id);
@@ -2005,8 +2012,41 @@ async function runForumAgentAsync(
   let summary: string;
   let tags: string[];
 
-  if (postType === "flash" || postType === "discussion") {
-    // 使用 Stand Engine 的 Twitter 风格推文生成
+  // 搜索增强型：flash/news/rant/scoop/discussion 类型优先搜索互联网
+  const searchEnhancedTypes = ["flash", "news", "rant", "scoop", "discussion"];
+  if (searchEnhancedTypes.includes(postType) && interestTags.length > 0) {
+    try {
+      const searchPost = await generateSearchBasedPost(
+        {
+          name: role.name,
+          personality: role.personality,
+          personalityTags,
+          interestTags,
+          systemPrompt: (role as any).systemPrompt ?? null,
+          catchphrase: (role as any).catchphrase ?? null,
+          backgroundStory: (role as any).backgroundStory ?? null,
+          viewpoints: (role as any).viewpoints ?? null,
+        },
+        postType as "news" | "flash" | "rant" | "scoop" | "analysis" | "discussion"
+      );
+      content = searchPost.content;
+      tags = searchPost.hashtags;
+      title = searchPost.title ?? null;
+      summary = content.slice(0, 80);
+    } catch (searchErr) {
+      console.warn("[runForumAgentAsync] Search failed, falling back to LLM-only:", searchErr);
+      const standRole2 = {
+        id: role.id, name: role.name, alias: "", avatarEmoji: "", avatarColor: "", avatarUrl: null,
+        personality: role.personality, bio: null, expertise: expertiseArr, personalityTags, interestTags,
+        replyProbability: 70, modelProvider: role.modelProvider_role, apiKey: role.apiKey,
+        systemPrompt: (role as any).systemPrompt ?? null, postFrequency: null, isActive: true,
+      };
+      const topicFallback = topic || (interestTags.length > 0 ? interestTags[Math.floor(Math.random() * interestTags.length)] : "半导体行业最新动态");
+      const tweetFallback = await generateTweet(standRole2, topicFallback, postType);
+      content = tweetFallback.content; tags = tweetFallback.hashtags; summary = content.slice(0, 80); title = null;
+    }
+  } else if (postType === "flash" || postType === "discussion") {
+    // 无兴趣标签时的降级逻辑
     const standRole = {
       id: role.id,
       name: role.name,
