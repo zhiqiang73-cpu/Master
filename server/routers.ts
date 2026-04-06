@@ -57,7 +57,7 @@ import {
 } from "./db";
 import { z } from "zod";
 import { nanoid } from "nanoid";
-import { masters, users, smartContracts, contentModerationLogs, aiMasterConfigs } from "../drizzle/schema";
+import { masters, users, smartContracts, contentModerationLogs, aiMasterConfigs, agentRoles, agentPosts, agentComments, agentTaskLogs } from "../drizzle/schema";
 import { storagePut } from "./storage";
 import { eq } from "drizzle-orm";
 
@@ -1246,9 +1246,281 @@ export const appRouter = router({
         return { success: true };
       }),
   }),
+  // ─── Agent Forum ─────────────────────────────────────────────────────────────
+  forum: router({
+    // List all agent roles (public)
+    listRoles: publicProcedure.query(async () => {
+      const db = await getDb();
+      if (!db) return [];
+      return db.select().from(agentRoles).where(eq(agentRoles.isActive, true)).orderBy(agentRoles.createdAt);
+    }),
+    // Get single role
+    getRole: publicProcedure.input(z.object({ id: z.number() })).query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return null;
+      const rows = await db.select().from(agentRoles).where(eq(agentRoles.id, input.id)).limit(1);
+      return rows[0] ?? null;
+    }),
+    // Admin: CRUD for agent roles
+    createRole: adminProcedure
+      .input(z.object({
+        name: z.string().min(2).max(100),
+        alias: z.string().min(2).max(50).regex(/^[a-z0-9-]+$/),
+        avatarEmoji: z.string().optional(),
+        avatarColor: z.string().optional(),
+        bio: z.string().optional(),
+        personality: z.string().optional(),
+        expertise: z.array(z.string()).optional(),
+        modelProvider: z.enum(["builtin", "qwen", "glm", "minimax", "openai", "anthropic", "custom"]).optional(),
+        apiKey: z.string().optional(),
+        apiEndpoint: z.string().optional(),
+        modelName: z.string().optional(),
+        postTypes: z.array(z.string()).optional(),
+        postFrequency: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        const { modelProvider, ...rest } = input;
+        await db.insert(agentRoles).values({
+          ...rest,
+          modelProvider_role: modelProvider ?? "builtin",
+          expertise: rest.expertise ?? [],
+          postTypes: rest.postTypes ?? ["news", "report", "flash"],
+          createdBy: ctx.user.id,
+        } as any);
+        return { success: true };
+      }),
+    updateRole: adminProcedure
+      .input(z.object({
+        id: z.number(),
+        name: z.string().optional(),
+        bio: z.string().optional(),
+        personality: z.string().optional(),
+        expertise: z.array(z.string()).optional(),
+        modelProvider: z.enum(["builtin", "qwen", "glm", "minimax", "openai", "anthropic", "custom"]).optional(),
+        apiKey: z.string().optional(),
+        apiEndpoint: z.string().optional(),
+        modelName: z.string().optional(),
+        postTypes: z.array(z.string()).optional(),
+        postFrequency: z.string().optional(),
+        isActive: z.boolean().optional(),
+        avatarEmoji: z.string().optional(),
+        avatarColor: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        const { id, modelProvider, ...rest } = input;
+        const updateData: Record<string, unknown> = { ...rest };
+        if (modelProvider) updateData.modelProvider_role = modelProvider;
+        await db.update(agentRoles).set(updateData as any).where(eq(agentRoles.id, id));
+        return { success: true };
+      }),
+    deleteRole: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        await db.delete(agentRoles).where(eq(agentRoles.id, input.id));
+        return { success: true };
+      }),
+    // List posts (public)
+    listPosts: publicProcedure
+      .input(z.object({
+        postType: z.enum(["news", "report", "flash", "discussion", "analysis", "all"]).optional(),
+        agentRoleId: z.number().optional(),
+        page: z.number().default(1),
+        limit: z.number().default(20),
+      }).optional())
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) return { posts: [], total: 0 };
+        const page = input?.page ?? 1;
+        const limit = input?.limit ?? 20;
+        const offset = (page - 1) * limit;
+        let query = db.select({
+          post: agentPosts,
+          role: { id: agentRoles.id, name: agentRoles.name, alias: agentRoles.alias, avatarEmoji: agentRoles.avatarEmoji, avatarColor: agentRoles.avatarColor },
+        }).from(agentPosts)
+          .leftJoin(agentRoles, eq(agentPosts.agentRoleId, agentRoles.id))
+          .$dynamic();
+        if (input?.postType && input.postType !== "all") {
+          query = query.where(eq(agentPosts.postType, input.postType as any));
+        }
+        if (input?.agentRoleId) {
+          query = query.where(eq(agentPosts.agentRoleId, input.agentRoleId));
+        }
+        const posts = await query.orderBy(agentPosts.createdAt).limit(limit).offset(offset);
+        return { posts, total: posts.length };
+      }),
+    // Get single post with comments
+    getPost: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) return null;
+        const rows = await db.select({
+          post: agentPosts,
+          role: { id: agentRoles.id, name: agentRoles.name, alias: agentRoles.alias, avatarEmoji: agentRoles.avatarEmoji, avatarColor: agentRoles.avatarColor },
+        }).from(agentPosts)
+          .leftJoin(agentRoles, eq(agentPosts.agentRoleId, agentRoles.id))
+          .where(eq(agentPosts.id, input.id)).limit(1);
+        if (!rows[0]) return null;
+        const comments = await db.select().from(agentComments)
+          .where(eq(agentComments.postId, input.id))
+          .orderBy(agentComments.createdAt);
+        return { ...rows[0], comments };
+      }),
+    // Admin: trigger agent to generate a post
+    triggerPost: adminProcedure
+      .input(z.object({
+        agentRoleId: z.number(),
+        postType: z.enum(["news", "report", "flash", "discussion", "analysis"]),
+        topic: z.string().optional(),
+        lang: z.enum(["zh", "en", "ja"]).default("zh"),
+      }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        const roles = await db.select().from(agentRoles).where(eq(agentRoles.id, input.agentRoleId)).limit(1);
+        const role = roles[0];
+        if (!role) throw new TRPCError({ code: "NOT_FOUND", message: "Agent 角色不存在" });
+        // Log the task
+        await db.insert(agentTaskLogs).values({
+          agentRoleId: input.agentRoleId,
+          taskType_log: "post",
+          taskStatus_log: "running",
+          triggeredBy: "manual",
+          prompt: input.topic ?? "自动选题",
+        } as any);
+        // Run async
+        runForumAgentAsync({ ...role, modelProvider_role: (role as any).modelProvider_role ?? "builtin" }, input.postType, input.topic ?? "", input.lang).catch(console.error);
+        return { success: true, message: `已触发 ${role.name} 生成 ${input.postType} 类型帖子` };
+      }),
+    // Admin: trigger agent-to-agent comment
+    triggerComment: adminProcedure
+      .input(z.object({
+        agentRoleId: z.number(),
+        postId: z.number(),
+        parentCommentId: z.number().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        const roles = await db.select().from(agentRoles).where(eq(agentRoles.id, input.agentRoleId)).limit(1);
+        const role = roles[0];
+        if (!role) throw new TRPCError({ code: "NOT_FOUND" });
+        const posts = await db.select().from(agentPosts).where(eq(agentPosts.id, input.postId)).limit(1);
+        const post = posts[0];
+        if (!post) throw new TRPCError({ code: "NOT_FOUND", message: "帖子不存在" });
+        runForumCommentAsync(role, post, input.parentCommentId).catch(console.error);
+        return { success: true };
+      }),
+    // User: add comment on a post
+    addComment: protectedProcedure
+      .input(z.object({
+        postId: z.number(),
+        content: z.string().min(1).max(2000),
+        parentId: z.number().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        await db.insert(agentComments).values({
+          postId: input.postId,
+          userId: ctx.user.id,
+          content: input.content,
+          parentId: input.parentId,
+        } as any);
+        await db.update(agentPosts).set({ commentCount: agentPosts.commentCount } as any)
+          .where(eq(agentPosts.id, input.postId));
+        return { success: true };
+      }),
+    // Admin: list task logs
+    taskLogs: adminProcedure
+      .input(z.object({ agentRoleId: z.number().optional(), limit: z.number().default(50) }).optional())
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) return [];
+        return db.select().from(agentTaskLogs).orderBy(agentTaskLogs.createdAt).limit(input?.limit ?? 50);
+      }),
+  }),
 });
-
-// ─── AI Agent Task Runner ─────────────────────────────────────────────────────
+// ─── Forum Agent Runner ───────────────────────────────────────────────────────
+async function runForumAgentAsync(
+  role: { id: number; name: string; personality: string | null; expertise: unknown; modelProvider_role: string; apiKey: string | null; modelName: string | null },
+  postType: string,
+  topic: string,
+  lang: string
+) {
+  const db = await getDb();
+  if (!db) return;
+  const expertiseArr = Array.isArray(role.expertise) ? role.expertise : [];
+  const typeLabels: Record<string, string> = { news: "新闻速递", report: "深度报告", flash: "短消息", discussion: "观点讨论", analysis: "数据分析" };
+  const systemPrompt = role.personality ||
+    `你是 ${role.name}，一位半导体行业专家，专长：${expertiseArr.join("、")}。你在一个行业论坛上发帖，风格专业但不失个性。`;
+  const topicHint = topic ? `主题：${topic}` : `请自选一个当前半导体行业的热点话题`;
+  const typeGuide = postType === "flash"
+    ? "请写一条100-200字的短消息，类似推特，直接表达观点，可以带话题标签。"
+    : postType === "report"
+    ? "请写一篇500-1000字的深度报告，有标题、分析和结论。"
+    : postType === "news"
+    ? "请写一条200-400字的行业新闻，有标题、事件概述和影响分析。"
+    : "请写一篇300-600字的观点文章，有标题和论点。";
+  const response = await invokeLLM({
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: `${topicHint}\n\n${typeGuide}\n\n请以JSON格式返回：{"title": "标题（flash类型可为null）", "content": "正文", "summary": "摘要（50字以内）", "tags": ["标签1", "标签2"]}` },
+    ],
+    response_format: { type: "json_schema", json_schema: { name: "forum_post", strict: true, schema: { type: "object", properties: { title: { type: ["string", "null"] }, content: { type: "string" }, summary: { type: "string" }, tags: { type: "array", items: { type: "string" } } }, required: ["title", "content", "summary", "tags"], additionalProperties: false } } },
+  });
+  const raw = response?.choices?.[0]?.message?.content;
+  if (!raw) return;
+  const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+  await db.insert(agentPosts).values({
+    agentRoleId: role.id,
+    postType: postType as any,
+    title: parsed.title,
+    content: parsed.content,
+    summary: parsed.summary,
+    tags: parsed.tags,
+    postStatus: "published",
+  } as any);
+  await db.update(agentRoles).set({ totalPosts: agentRoles.totalPosts, lastPostedAt: new Date() } as any).where(eq(agentRoles.id, role.id));
+}
+async function runForumCommentAsync(
+  role: { id: number; name: string; personality: string | null; expertise: unknown },
+  post: { id: number; title: string | null; content: string },
+  parentCommentId?: number
+) {
+  const db = await getDb();
+  if (!db) return;
+  const expertiseArr = Array.isArray(role.expertise) ? role.expertise : [];
+  const systemPrompt = role.personality ||
+    `你是 ${role.name}，一位半导体行业专家，专长：${expertiseArr.join("、")}。你在评论一篇论坛帖子，风格专业、有见地。`;
+  let parentContent = "";
+  if (parentCommentId) {
+    const parentRows = await db.select().from(agentComments).where(eq(agentComments.id, parentCommentId)).limit(1);
+    if (parentRows[0]) parentContent = `\n\n你在回复这条评论："${parentRows[0].content}"`;
+  }
+  const response = await invokeLLM({
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: `请对以下帖子写一条专业评论（100-300字）：\n\n标题：${post.title ?? "无标题"}\n内容：${post.content.substring(0, 500)}${parentContent}` },
+    ],
+  });
+  const content = response?.choices?.[0]?.message?.content;
+  if (!content) return;
+  await db.insert(agentComments).values({
+    postId: post.id,
+    agentRoleId: role.id,
+    content: typeof content === "string" ? content : JSON.stringify(content),
+    parentId: parentCommentId,
+  } as any);
+  await db.update(agentPosts).set({ commentCount: agentPosts.commentCount } as any).where(eq(agentPosts.id, post.id));
+}
+// ─── AI Agent Task Runner ──────────────────────────────────────────────────────
 async function runAgentTaskAsync(taskId: number, task: Awaited<ReturnType<typeof getAgentTask>>) {
   if (!task) return;
 

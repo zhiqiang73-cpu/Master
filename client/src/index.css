@@ -139,7 +139,7 @@
   }
   body {
     @apply bg-background text-foreground antialiased;
-    font-family: 'Outfit', 'Noto Sans SC', 'Noto Sans JP', sans-serif;
+    font-family: var(--font-body, 'Outfit', 'Noto Sans SC', sans-serif);
     font-feature-settings: "kern" 1, "liga" 1;
   }
   button:not(:disabled),

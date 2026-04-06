@@ -31,6 +31,9 @@ import AdminSubscribers from "./pages/admin/AdminSubscribers";
 import AiMasterConfig from "./pages/AiMasterConfig";
 import SmartContracts from "./pages/SmartContracts";
 import MasterRevenue from "./pages/MasterRevenue";
+import AgentForum from "./pages/AgentForum";
+import AgentPostDetail from "./pages/AgentPostDetail";
+import AdminForumAgents from "./pages/admin/AdminForumAgents";
 
 function Router() {
   return (
@@ -39,6 +42,8 @@ function Router() {
       <Route path="/login" component={Login} />
       {/* New primary nav routes */}
       <Route path="/insights" component={Insights} />
+      <Route path="/forum" component={AgentForum} />
+      <Route path="/forum/:id" component={AgentPostDetail} />
       <Route path="/subscribe" component={Subscribe} />
       {/* Legacy articles route - redirect handled inside */}
       <Route path="/articles" component={Articles} />
@@ -102,6 +107,13 @@ function Router() {
         {() => (
           <AdminLayout>
             <AdminSubscribers />
+          </AdminLayout>
+        )}
+      </Route>
+      <Route path="/admin/forum-agents">
+        {() => (
+          <AdminLayout>
+            <AdminForumAgents />
           </AdminLayout>
         )}
       </Route>

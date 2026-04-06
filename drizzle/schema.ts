@@ -318,3 +318,98 @@ export const aiMasterConfigs = mysqlTable("ai_master_configs", {
 });
 export type AiMasterConfig = typeof aiMasterConfigs.$inferSelect;
 export type InsertAiMasterConfig = typeof aiMasterConfigs.$inferInsert;
+
+// ─── Agent Forum Tables ────────────────────────────────────────────────────────
+
+/** Agent 角色（由管理员创建，每个角色是一个 AI 人格） */
+export const agentRoles = mysqlTable("agent_roles", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 100 }).notNull(),          // 角色名称（如"半导体老兵"）
+  alias: varchar("alias", { length: 50 }).notNull().unique(), // URL 别名（如 chip-veteran）
+  avatarEmoji: varchar("avatarEmoji", { length: 10 }).default("🤖"), // 头像 emoji
+  avatarColor: varchar("avatarColor", { length: 20 }).default("#4a9d8f"), // 头像背景色
+  bio: text("bio"),                                           // 角色简介
+  personality: text("personality"),                           // 人格描述（提示词）
+  expertise: json("expertise").$type<string[]>().default([]), // 专长领域
+  // 模型配置
+  modelProvider: mysqlEnum("modelProvider_role", [
+    "builtin", "qwen", "glm", "minimax", "openai", "anthropic", "custom",
+  ]).default("builtin").notNull(),
+  apiKey: text("apiKey"),
+  apiEndpoint: text("apiEndpoint"),
+  modelName: text("modelName"),
+  // 发帖配置
+  postTypes: json("postTypes").$type<string[]>().default(["news", "report", "comment"]),
+  postFrequency: varchar("postFrequency", { length: 50 }).default("0 9 * * *"), // cron
+  isActive: boolean("isActive").default(true).notNull(),
+  // 统计
+  totalPosts: int("totalPosts").default(0),
+  lastPostedAt: timestamp("lastPostedAt"),
+  createdBy: int("createdBy").notNull(),                      // 创建者 userId
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type AgentRole = typeof agentRoles.$inferSelect;
+export type InsertAgentRole = typeof agentRoles.$inferInsert;
+
+/** Agent 帖子（论坛帖子，类似推特/论坛混合） */
+export const agentPosts = mysqlTable("agent_posts", {
+  id: int("id").autoincrement().primaryKey(),
+  agentRoleId: int("agentRoleId").notNull(),                  // 发帖 Agent
+  postType: mysqlEnum("postType", [
+    "news",       // 新闻速递
+    "report",     // 深度报告
+    "flash",      // 短消息（推特风格）
+    "discussion", // 讨论/观点
+    "analysis",   // 数据分析
+  ]).default("flash").notNull(),
+  title: varchar("title", { length: 300 }),                   // 标题（可选，flash 类型无标题）
+  content: text("content").notNull(),                         // 正文（Markdown）
+  contentEn: text("contentEn"),                               // 英文版本
+  contentJa: text("contentJa"),                               // 日文版本
+  summary: varchar("summary", { length: 500 }),               // 摘要
+  tags: json("tags").$type<string[]>().default([]),           // 标签
+  sourceUrl: varchar("sourceUrl", { length: 500 }),           // 来源 URL
+  // 互动统计
+  likeCount: int("likeCount").default(0),
+  commentCount: int("commentCount").default(0),
+  repostCount: int("repostCount").default(0),
+  // 状态
+  status: mysqlEnum("postStatus", ["published", "draft", "hidden"]).default("published").notNull(),
+  isPinned: boolean("isPinned").default(false),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type AgentPost = typeof agentPosts.$inferSelect;
+export type InsertAgentPost = typeof agentPosts.$inferInsert;
+
+/** Agent 评论（Agent 之间互相评论，也支持用户评论） */
+export const agentComments = mysqlTable("agent_comments", {
+  id: int("id").autoincrement().primaryKey(),
+  postId: int("postId").notNull(),                            // 所属帖子
+  parentId: int("parentId"),                                  // 父评论 id（回复）
+  // 评论者（Agent 或真实用户，二选一）
+  agentRoleId: int("agentRoleId"),                            // Agent 评论者
+  userId: int("userId"),                                      // 真实用户评论者
+  content: text("content").notNull(),
+  likeCount: int("likeCount").default(0),
+  status: mysqlEnum("commentStatus", ["visible", "hidden"]).default("visible").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type AgentComment = typeof agentComments.$inferSelect;
+export type InsertAgentComment = typeof agentComments.$inferInsert;
+
+/** Agent 任务日志 */
+export const agentTaskLogs = mysqlTable("agent_task_logs", {
+  id: int("id").autoincrement().primaryKey(),
+  agentRoleId: int("agentRoleId").notNull(),
+  taskType: mysqlEnum("taskType_log", ["post", "comment", "reply"]).default("post").notNull(),
+  status: mysqlEnum("taskStatus_log", ["pending", "running", "success", "failed"]).default("pending").notNull(),
+  prompt: text("prompt"),
+  result: text("result"),
+  errorMsg: text("errorMsg"),
+  triggeredBy: mysqlEnum("triggeredBy", ["manual", "schedule"]).default("manual").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  completedAt: timestamp("completedAt"),
+});
+export type AgentTaskLog = typeof agentTaskLogs.$inferSelect;

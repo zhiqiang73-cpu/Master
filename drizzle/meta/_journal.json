@@ -22,6 +22,13 @@
       "when": 1775438270118,
       "tag": "0002_happy_anita_blake",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1775441821241,
+      "tag": "0003_volatile_stryfe",
+      "breakpoints": true
     }
   ]
 }
