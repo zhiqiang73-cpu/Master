@@ -1339,6 +1339,11 @@ export const appRouter = router({
         personalityTags: z.array(z.string()).optional(),
         interestTags: z.array(z.string()).optional(),
         replyProbability: z.number().min(0).max(100).optional(),
+        speakingStyle: z.string().optional(),
+        catchphrase: z.string().optional(),
+        backgroundStory: z.string().optional(),
+        workFocus: z.string().optional(),
+        viewpoints: z.array(z.string()).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const db = await getDb();
@@ -1388,6 +1393,11 @@ export const appRouter = router({
         personalityTags: z.array(z.string()).optional(),
         interestTags: z.array(z.string()).optional(),
         replyProbability: z.number().min(0).max(100).optional(),
+        speakingStyle: z.string().optional(),
+        catchphrase: z.string().optional(),
+        backgroundStory: z.string().optional(),
+        workFocus: z.string().optional(),
+        viewpoints: z.array(z.string()).optional(),
         // Intelligence fields
         intelligenceSources: z.array(z.string()).optional(),
         outputFormats: z.array(z.string()).optional(),
@@ -1580,6 +1590,11 @@ export const appRouter = router({
         avatarEmoji: z.string().optional(),
         avatarColor: z.string().optional(),
         generateJojoAvatar: z.boolean().optional(),
+        speakingStyle: z.string().optional(),
+        catchphrase: z.string().optional(),
+        backgroundStory: z.string().optional(),
+        workFocus: z.string().optional(),
+        viewpoints: z.array(z.string()).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const db = await getDb();
@@ -1611,6 +1626,11 @@ export const appRouter = router({
           expertise: input.expertise ?? [],
           personalityTags: input.personalityTags ?? [],
           interestTags: input.interestTags ?? [],
+          speakingStyle: (input as any).speakingStyle ?? null,
+          catchphrase: (input as any).catchphrase ?? null,
+          backgroundStory: (input as any).backgroundStory ?? null,
+          workFocus: (input as any).workFocus ?? null,
+          viewpoints: (input as any).viewpoints ?? [],
           postFrequency: input.postFrequency ?? null,
           replyProbability: input.replyProbability ?? 70,
           modelProvider_role: input.modelProvider ?? "builtin",
@@ -1660,6 +1680,12 @@ export const appRouter = router({
         isActive: z.boolean().optional(),
         avatarEmoji: z.string().optional(),
         avatarColor: z.string().optional(),
+        speakingStyle: z.string().optional(),
+        catchphrase: z.string().optional(),
+        backgroundStory: z.string().optional(),
+        workFocus: z.string().optional(),
+        viewpoints: z.array(z.string()).optional(),
+        replyProbability: z.number().min(0).max(100).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const db = await getDb();

@@ -358,6 +358,12 @@ export const agentRoles = mysqlTable("agent_roles", {
   triggerMode: mysqlEnum("triggerMode", ["manual", "scheduled", "keyword"]).default("manual"), // 触发模式
   triggerKeywords: json("triggerKeywords").$type<string[]>(),  // 关键词触发列表
   specialty: text("specialty"),                                             // 专业领域描述（Master 注册时填写）
+  // 具象化人格字段
+  speakingStyle: text("speakingStyle"),                // 说话风格描述（如：喜欢用数据、爱反问、常引用历史）
+  catchphrase: varchar("catchphrase", { length: 200 }), // 口头禅/标志性用语
+  backgroundStory: text("backgroundStory"),            // 背景故事（从哪里来、经历了什么）
+  workFocus: text("workFocus"),                         // 当前工作重心/关注方向
+  viewpoints: json("viewpoints").$type<string[]>().default([]), // 核心观点列表（如：看好HBM、看空英特尔）
   isActive: boolean("isActive").default(true).notNull(),
   // 封禁状态
   isBanned: boolean("isBanned").default(false).notNull(),

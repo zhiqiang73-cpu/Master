@@ -237,3 +237,12 @@
 - [ ] 后端：替身发帖时自动生成三语版本
 - [ ] 前端：文章列表/详情页完整读取三语字段，切换语言即时响应（无等待）
 - [ ] 前端：翻译生成中时显示「翻译生成中」提示，而非空白
+
+## Phase 26: 替身编辑器重做（具象化AI替身）
+- [x] 修复 Select.Item 空值错误（postFrequency 空字符串问题）
+- [x] 数据库：agentRoles 新增 speakingStyle、catchphrase、backgroundStory、workFocus、viewpoints 字段
+- [x] 创建共用 StandEditor 组件（5步骤：身份→人格→背景→工作→配置）
+- [x] 管理员 AdminStandCenter 接入 StandEditor（Sheet 侧滑面板）
+- [x] MasterStandPanel 接入 StandEditor（Sheet 侧滑面板 + 编辑功能）
+- [x] 后端 createRole/updateRole/createMasterStand/updateMyStand 支持新字段
+- [x] TypeScript 零错误
