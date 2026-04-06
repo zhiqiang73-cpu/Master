@@ -14,8 +14,10 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { useI18n } from "@/contexts/I18nContext";
 import { formatDistanceToNow } from "date-fns";
-import { zhCN } from "date-fns/locale";
+import { zhCN, enUS } from "date-fns/locale";
+import { ja } from "date-fns/locale";
 import { toast } from "sonner";
 
 interface Role {
@@ -25,13 +27,15 @@ interface Role {
 interface Post {
   id: number; agentRoleId: number; postType: string;
   title?: string | null; content: string;
+  contentEn?: string | null; contentJa?: string | null;
   tags?: string[] | null; imageUrls?: string[] | null;
   likeCount?: number | null; commentCount?: number | null; repostCount?: number | null;
   createdAt: Date | string;
 }
 
-function timeAgo(date: Date | string) {
-  try { return formatDistanceToNow(new Date(date), { addSuffix: true, locale: zhCN }); } catch { return ""; }
+function timeAgo(date: Date | string, lang?: string) {
+  const locale = lang === "en" ? enUS : lang === "ja" ? ja : zhCN;
+  try { return formatDistanceToNow(new Date(date), { addSuffix: true, locale }); } catch { return ""; }
 }
 
 function RoleAvatar({ role, size = "md" }: { role: Role | null | undefined; size?: "sm" | "md" | "lg" }) {
@@ -132,10 +136,14 @@ function PostCard({ post, role, allRoles, onLike }: {
   const [liked, setLiked] = useState(false);
   const [localLikes, setLocalLikes] = useState(post.likeCount ?? 0);
   const [lightbox, setLightbox] = useState<string | null>(null);
+  const { lang } = useI18n();
   const images = Array.isArray(post.imageUrls) ? post.imageUrls : [];
   const tags = Array.isArray(post.tags) ? post.tags : [];
   const isFlash = post.postType === "flash";
   const handleLike = () => { if (liked) return; setLiked(true); setLocalLikes(n => n + 1); onLike(post.id); };
+  // Language-aware content
+  const displayContent = lang === "en" ? (post.contentEn || post.content) : lang === "ja" ? (post.contentJa || post.content) : post.content;
+  const isTranslating = (lang === "en" && !post.contentEn) || (lang === "ja" && !post.contentJa);
 
   return (
     <motion.article initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}
@@ -150,7 +158,7 @@ function PostCard({ post, role, allRoles, onLike }: {
             <span className="font-semibold text-sm">{role?.name ?? "未知替身"}</span>
             <span className="text-xs text-muted-foreground">@{role?.alias ?? "unknown"}</span>
             <span className="text-xs text-muted-foreground">·</span>
-            <span className="text-xs text-muted-foreground">{timeAgo(post.createdAt)}</span>
+            <span className="text-xs text-muted-foreground">{timeAgo(post.createdAt, lang)}</span>
             <Badge variant="outline" className={`text-[10px] px-1.5 py-0 border-0 ${TYPE_COLORS[post.postType] ?? ""}`}>
               {TYPE_LABELS[post.postType] ?? post.postType}
             </Badge>
@@ -160,7 +168,10 @@ function PostCard({ post, role, allRoles, onLike }: {
             </Badge>
           </div>
           {!isFlash && post.title && <h3 className="font-bold text-base mb-1.5 leading-snug">{post.title}</h3>}
-          <p className="text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap break-words">{post.content}</p>
+          <p className="text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap break-words">{displayContent}</p>
+          {isTranslating && (
+            <p className="text-xs text-muted-foreground/60 mt-1 italic">Translation generating...</p>
+          )}
           {tags.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mt-2">
               {tags.map(t => <span key={t} className="text-xs text-[var(--patina)] font-medium cursor-pointer hover:underline">#{t}</span>)}

@@ -796,6 +796,8 @@ export const appRouter = router({
           await updateMaster(article.masterId, {
             articleCount: (await getMasterById(article.masterId))?.articleCount ?? 0 + 1,
           });
+          // Auto-generate translations in background (non-blocking)
+          autoTranslateArticle(input.id, article).catch(console.error);
         }
         return { success: true };
       }),
@@ -2056,6 +2058,8 @@ async function runForumAgentAsync(
     })[0];
     if (latestPost) {
       triggerEventDrivenComments(latestPost.id, role.id, tags).catch(console.error);
+      // Auto-translate the post in the background
+      autoTranslateAgentPost(latestPost.id, content, title).catch(console.error);
     }
   } catch (err) {
     console.error("[runForumAgentAsync] Failed to trigger event-driven comments:", err);
@@ -2552,4 +2556,185 @@ export async function runAllRssDigests(): Promise<void> {
     await sendRssDigestForStand(roleId);
   }
   console.log(`[RSS] All digests sent.`);
+}
+
+
+// ─── Auto-Translation Helpers ─────────────────────────────────────────────────
+
+/**
+ * Auto-translate an article to English and Japanese after approval.
+ * Runs in the background (non-blocking).
+ */
+async function autoTranslateArticle(articleId: number, article: { titleZh?: string | null; summaryZh?: string | null; contentZh?: string | null; titleEn?: string | null; contentEn?: string | null; titleJa?: string | null; contentJa?: string | null }): Promise<void> {
+  const needsEn = !article.titleEn || !article.contentEn;
+  const needsJa = !article.titleJa || !article.contentJa;
+  if (!needsEn && !needsJa) return; // Already translated
+
+  const sourceTitle = article.titleZh ?? "";
+  const sourceSummary = article.summaryZh ?? "";
+  const sourceContent = (article.contentZh ?? "").slice(0, 6000); // Limit to avoid token overflow
+
+  try {
+    if (needsEn) {
+      const enResp = await invokeLLM({
+        messages: [
+          {
+            role: "system",
+            content: `You are a professional semiconductor industry translator. Translate the following Chinese article into natural, professional English. Return JSON with keys: title, summary, content.`,
+          },
+          {
+            role: "user",
+            content: `Title: ${sourceTitle}\nSummary: ${sourceSummary}\nContent:\n${sourceContent}`,
+          },
+        ],
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "translation",
+            strict: true,
+            schema: {
+              type: "object",
+              properties: {
+                title: { type: "string" },
+                summary: { type: "string" },
+                content: { type: "string" },
+              },
+              required: ["title", "summary", "content"],
+              additionalProperties: false,
+            },
+          },
+        },
+      });
+      const enResult = JSON.parse(enResp.choices[0]?.message?.content as string ?? "{}");
+      await updateArticle(articleId, {
+        titleEn: enResult.title ?? undefined,
+        summaryEn: enResult.summary ?? undefined,
+        contentEn: enResult.content ?? undefined,
+      });
+      console.log(`[Translation] Article ${articleId} English translation done.`);
+    }
+
+    if (needsJa) {
+      const jaResp = await invokeLLM({
+        messages: [
+          {
+            role: "system",
+            content: `あなたは半導体業界の専門翻訳者です。以下の中国語記事を自然で専門的な日本語に翻訳してください。JSONで返してください。キー: title, summary, content。`,
+          },
+          {
+            role: "user",
+            content: `Title: ${sourceTitle}\nSummary: ${sourceSummary}\nContent:\n${sourceContent}`,
+          },
+        ],
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "translation",
+            strict: true,
+            schema: {
+              type: "object",
+              properties: {
+                title: { type: "string" },
+                summary: { type: "string" },
+                content: { type: "string" },
+              },
+              required: ["title", "summary", "content"],
+              additionalProperties: false,
+            },
+          },
+        },
+      });
+      const jaResult = JSON.parse(jaResp.choices[0]?.message?.content as string ?? "{}");
+      await updateArticle(articleId, {
+        titleJa: jaResult.title ?? undefined,
+        summaryJa: jaResult.summary ?? undefined,
+        contentJa: jaResult.content ?? undefined,
+      });
+      console.log(`[Translation] Article ${articleId} Japanese translation done.`);
+    }
+  } catch (err) {
+    console.error(`[Translation] Failed to translate article ${articleId}:`, err);
+  }
+}
+
+/**
+ * Auto-translate an agent post to English and Japanese after publishing.
+ * Runs in the background (non-blocking).
+ */
+export async function autoTranslateAgentPost(postId: number, content: string, title?: string | null): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+
+  try {
+    const enResp = await invokeLLM({
+      messages: [
+        {
+          role: "system",
+          content: `You are a semiconductor industry translator. Translate the following Chinese text to English. Return JSON with keys: title (if applicable), content.`,
+        },
+        {
+          role: "user",
+          content: `${title ? `Title: ${title}\n` : ""}Content: ${content.slice(0, 2000)}`,
+        },
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "translation",
+          strict: true,
+          schema: {
+            type: "object",
+            properties: {
+              title: { type: "string" },
+              content: { type: "string" },
+            },
+            required: ["title", "content"],
+            additionalProperties: false,
+          },
+        },
+      },
+    });
+    const enResult = JSON.parse(enResp.choices[0]?.message?.content as string ?? "{}");
+
+    const jaResp = await invokeLLM({
+      messages: [
+        {
+          role: "system",
+          content: `あなたは半導体業界の翻訳者です。以下の中国語テキストを日本語に翻訳してください。JSONで返してください。キー: title, content。`,
+        },
+        {
+          role: "user",
+          content: `${title ? `Title: ${title}\n` : ""}Content: ${content.slice(0, 2000)}`,
+        },
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "translation",
+          strict: true,
+          schema: {
+            type: "object",
+            properties: {
+              title: { type: "string" },
+              content: { type: "string" },
+            },
+            required: ["title", "content"],
+            additionalProperties: false,
+          },
+        },
+      },
+    });
+    const jaResult = JSON.parse(jaResp.choices[0]?.message?.content as string ?? "{}");
+
+    await db.update(agentPosts)
+      .set({
+        contentEn: enResult.content ?? null,
+        contentJa: jaResult.content ?? null,
+      } as any)
+      .where(eq(agentPosts.id, postId));
+
+    console.log(`[Translation] AgentPost ${postId} translations done.`);
+  } catch (err) {
+    console.error(`[Translation] Failed to translate agentPost ${postId}:`, err);
+  }
 }
