@@ -19,6 +19,7 @@ import {
   DollarSign, ChevronRight, Lock, Unlock
 } from "lucide-react";
 import { getLoginUrl } from "@/const";
+import AvatarUpload from "@/components/AvatarUpload";
 
 const BOUNTY_STATUS_MAP: Record<string, { label: string; cls: string }> = {
   open: { label: "待接单", cls: "bg-blue-100 text-blue-700" },
@@ -299,6 +300,18 @@ export default function Dashboard() {
           {/* Profile Tab */}
           <TabsContent value="profile">
             <div className="max-w-md space-y-6">
+              {/* Avatar Upload */}
+              <div>
+                <h2 className="font-semibold text-foreground mb-4">头像</h2>
+                <AvatarUpload
+                  currentUrl={(user as { avatarUrl?: string } | null)?.avatarUrl ?? undefined}
+                  name={user?.name ?? undefined}
+                  onSuccess={(_url: string) => {
+                    toast.success("头像已更新！");
+                    window.location.reload();
+                  }}
+                />
+              </div>
               <div>
                 <h2 className="font-semibold text-foreground mb-4">个人信息</h2>
                 <div className="border border-border rounded-lg p-5 bg-card space-y-4">

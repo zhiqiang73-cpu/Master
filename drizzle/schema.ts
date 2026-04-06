@@ -230,3 +230,91 @@ export const agentTasks = mysqlTable("agent_tasks", {
 
 export type AgentTask = typeof agentTasks.$inferSelect;
 export type InsertAgentTask = typeof agentTasks.$inferInsert;
+
+// ─── Smart Contracts (早期发现者分成 / 收益权记录) ────────────────────────────
+export const smartContracts = mysqlTable("smart_contracts", {
+  id: int("id").autoincrement().primaryKey(),
+  contractType: mysqlEnum("contractType", [
+    "early_bird",       // 早期发现者分成：前N个付费读者获得分成
+    "revenue_right",    // 收益权交易：Master 出售文章未来收益权
+    "bounty_split",     // 悬赏分成：平台/Master/发布者三方分成
+  ]).notNull(),
+  articleId: int("articleId"),           // 关联文章（可选）
+  masterId: int("masterId").notNull(),   // 关联 Master
+  userId: int("userId"),                 // 关联用户（购买方）
+  // 早期发现者参数
+  earlyBirdSlots: int("earlyBirdSlots").default(10),    // 早期发现者名额
+  earlyBirdFilled: int("earlyBirdFilled").default(0),   // 已填充名额
+  earlyBirdSharePct: int("earlyBirdSharePct").default(5), // 每个早期发现者分成比例 (%)
+  // 收益权参数
+  revenueSharePct: int("revenueSharePct").default(0),   // 出售的收益权比例 (%)
+  salePrice: int("salePrice").default(0),               // 出售价格（分）
+  // 状态
+  status: mysqlEnum("status", ["active", "fulfilled", "expired", "cancelled"]).default("active").notNull(),
+  // 分成记录
+  totalPaidOut: int("totalPaidOut").default(0),         // 累计已支付（分）
+  // 合约条款（JSON）
+  terms: text("terms"),
+  expiresAt: timestamp("expiresAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type SmartContract = typeof smartContracts.$inferSelect;
+export type InsertSmartContract = typeof smartContracts.$inferInsert;
+
+// ─── Content Moderation Log (内容审核日志) ────────────────────────────────────
+export const contentModerationLogs = mysqlTable("content_moderation_logs", {
+  id: int("id").autoincrement().primaryKey(),
+  articleId: int("articleId"),
+  bountyId: int("bountyId"),
+  contentType: mysqlEnum("contentType", ["article", "bounty", "comment"]).notNull(),
+  // 审核结果
+  complianceScore: int("complianceScore").default(0),   // 0-100
+  passed: boolean("passed").default(false).notNull(),
+  // 脱敏结果
+  sensitiveWordsFound: json("sensitiveWordsFound").$type<string[]>().default([]),
+  redactedContent: text("redactedContent"),             // 脱敏后的内容
+  // LLM 审核详情
+  issues: json("issues").$type<string[]>().default([]),
+  suggestion: text("suggestion"),
+  // 审核来源
+  triggeredBy: mysqlEnum("triggeredBy", ["auto", "manual", "appeal"]).default("auto").notNull(),
+  reviewedBy: int("reviewedBy"),                        // 管理员 ID（人工审核时）
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type ContentModerationLog = typeof contentModerationLogs.$inferSelect;
+
+// ─── AI Master Config (AI Master 多模型配置) ──────────────────────────────────
+export const aiMasterConfigs = mysqlTable("ai_master_configs", {
+  id: int("id").autoincrement().primaryKey(),
+  masterId: int("masterId").notNull().unique(),
+  // 模型配置
+  modelProvider: mysqlEnum("modelProvider", [
+    "builtin",    // Manus 内置 LLM
+    "qwen",       // 阿里通义千问
+    "glm",        // 智谱 GLM
+    "minimax",    // MiniMax
+    "openai",     // OpenAI
+    "anthropic",  // Anthropic Claude
+    "custom",     // 自定义 API
+  ]).default("builtin").notNull(),
+  apiKey: text("apiKey"),               // 加密存储的 API Key
+  apiEndpoint: text("apiEndpoint"),     // 自定义 API 端点
+  modelName: text("modelName"),         // 具体模型名称（如 qwen-max）
+  // 个性化提示词
+  systemPrompt: text("systemPrompt"),   // 系统提示词（定义 AI Master 的人格/专长）
+  researchPrompt: text("researchPrompt"), // 研究收集提示词
+  writingPrompt: text("writingPrompt"),   // 文章撰写提示词
+  // 研究配置
+  researchTopics: json("researchTopics").$type<string[]>().default([]),
+  targetLanguages: json("targetLanguages").$type<string[]>().default(["zh", "en", "ja"]),
+  autoPublish: boolean("autoPublish").default(false).notNull(),
+  publishSchedule: varchar("publishSchedule", { length: 50 }),  // cron 表达式
+  // 统计
+  totalArticlesGenerated: int("totalArticlesGenerated").default(0),
+  lastRunAt: timestamp("lastRunAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type AiMasterConfig = typeof aiMasterConfigs.$inferSelect;
+export type InsertAiMasterConfig = typeof aiMasterConfigs.$inferInsert;

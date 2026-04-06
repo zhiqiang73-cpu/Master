@@ -57,7 +57,8 @@ import {
 } from "./db";
 import { z } from "zod";
 import { nanoid } from "nanoid";
-import { masters, users } from "../drizzle/schema";
+import { masters, users, smartContracts, contentModerationLogs, aiMasterConfigs } from "../drizzle/schema";
+import { storagePut } from "./storage";
 import { eq } from "drizzle-orm";
 
 // ─── Admin Guard ──────────────────────────────────────────────────────────────
@@ -337,7 +338,65 @@ export const appRouter = router({
         const master = await getMasterByUserId(ctx.user.id);
         if (!master || article.masterId !== master.id) throw new TRPCError({ code: "FORBIDDEN" });
         if (article.status !== "draft") throw new TRPCError({ code: "BAD_REQUEST", message: "只有草稿可以提交审核" });
-
+        // Auto-moderate content before submission
+        const db = await getDb();
+        if (db && article.contentZh) {
+          try {
+            const modResponse = await invokeLLM({
+              messages: [
+                {
+                  role: "system",
+                  content: `你是一个半导体行业内容安全专家。请对以下内容进行合规检测和脱敏处理。以JSON格式返回：
+{"complianceScore":0-100,"passed":true/false,"sensitiveWordsFound":[],"redactedContent":"脱敏后内容","issues":[],"suggestion":""}`,
+                },
+                { role: "user", content: article.contentZh.slice(0, 3000) },
+              ],
+              response_format: {
+                type: "json_schema",
+                json_schema: {
+                  name: "moderation_result",
+                  strict: true,
+                  schema: {
+                    type: "object",
+                    properties: {
+                      complianceScore: { type: "number" },
+                      passed: { type: "boolean" },
+                      sensitiveWordsFound: { type: "array", items: { type: "string" } },
+                      redactedContent: { type: "string" },
+                      issues: { type: "array", items: { type: "string" } },
+                      suggestion: { type: "string" },
+                    },
+                    required: ["complianceScore", "passed", "sensitiveWordsFound", "redactedContent", "issues", "suggestion"],
+                    additionalProperties: false,
+                  },
+                },
+              },
+            });
+            const modResult = JSON.parse(modResponse.choices[0]?.message?.content as string ?? "{}");
+            await db.insert(contentModerationLogs).values({
+              contentType: "article",
+              articleId: input.id,
+              complianceScore: modResult.complianceScore ?? 0,
+              passed: modResult.passed ?? true,
+              sensitiveWordsFound: modResult.sensitiveWordsFound ?? [],
+              redactedContent: modResult.redactedContent,
+              issues: modResult.issues ?? [],
+              suggestion: modResult.suggestion,
+              triggeredBy: "auto",
+            });
+            // If content fails moderation (score < 30), block submission
+            if (modResult.complianceScore < 30) {
+              throw new TRPCError({
+                code: "BAD_REQUEST",
+                message: `内容合规检测未通过（评分：${modResult.complianceScore}）：${modResult.issues?.join("、")}`,
+              });
+            }
+          } catch (e) {
+            // If moderation fails due to API error, allow submission but log
+            if (e instanceof TRPCError) throw e;
+            console.error("Auto-moderation failed:", e);
+          }
+        }
         await updateArticle(input.id, { status: "pending" });
         return { success: true };
       }),
@@ -388,6 +447,58 @@ export const appRouter = router({
         const master = await getMasterByUserId(ctx.user.id);
         if (!master) return { articles: [], total: 0 };
         return listArticles({ masterId: master.id, page: input?.page, limit: input?.limit });
+      }),
+    // Master: Create AI assistant sub-agent
+    createAiAssistant: masterProcedure
+      .input(z.object({
+        displayName: z.string().min(1),
+        alias: z.string().min(1),
+        bio: z.string().optional(),
+        expertise: z.array(z.string()).optional(),
+        llmProvider: z.enum(["builtin", "qwen", "glm", "minimax", "openai", "anthropic", "custom"]).default("builtin"),
+        llmApiKey: z.string().optional(),
+        llmBaseUrl: z.string().optional(),
+        llmModel: z.string().optional(),
+        systemPrompt: z.string().optional(),
+        researchPrompt: z.string().optional(),
+        writingPrompt: z.string().optional(),
+        researchTopics: z.array(z.string()).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        // Check alias uniqueness
+        const existing = await db.select().from(masters).where(eq(masters.alias, input.alias)).limit(1);
+        if (existing.length > 0) throw new TRPCError({ code: "CONFLICT", message: "别名已被使用" });
+        // Create AI master record (requires userId - use a placeholder system userId)
+        // AI agents are owned by the creating master's userId as parent
+        const parentMaster = await getMasterByUserId(ctx.user.id);
+        if (!parentMaster) throw new TRPCError({ code: "FORBIDDEN", message: "您需要先成为 Master" });
+        const [newMaster] = await db.insert(masters).values({
+          userId: ctx.user.id, // linked to creating master's user
+          displayName: input.displayName,
+          alias: input.alias,
+          bio: input.bio ?? null,
+          expertise: input.expertise ?? [],
+          isAiAgent: true,
+          level: 1,
+          articleCount: 0,
+          subscriberCount: 0,
+          isVerified: false,
+        }).$returningId();
+        // Save AI config
+        await db.insert(aiMasterConfigs).values({
+          masterId: newMaster.id,
+          modelProvider: input.llmProvider,
+          apiKey: input.llmApiKey ?? null,
+          apiEndpoint: input.llmBaseUrl ?? null,
+          modelName: input.llmModel ?? null,
+          systemPrompt: input.systemPrompt ?? null,
+          researchPrompt: input.researchPrompt ?? null,
+          writingPrompt: input.writingPrompt ?? null,
+          researchTopics: input.researchTopics ?? [],
+        });
+        return { success: true, masterId: newMaster.id };
       }),
   }),
 
@@ -853,11 +964,286 @@ export const appRouter = router({
         name: z.string().min(2).max(50).optional(),
         bio: z.string().optional(),
         preferredLang: z.enum(["zh", "en", "ja"]).optional(),
+        avatarUrl: z.string().url().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const db = await getDb();
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
         await db.update(users).set(input).where(eq(users.id, ctx.user.id));
+        return { success: true };
+      }),
+    // Upload avatar to S3 and return URL
+    uploadAvatar: protectedProcedure
+      .input(z.object({
+        base64Data: z.string(), // base64 encoded image
+        mimeType: z.string().default("image/jpeg"),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        // Decode base64
+        const buffer = Buffer.from(input.base64Data, "base64");
+        const ext = input.mimeType.split("/")[1] ?? "jpg";
+        const fileKey = `avatars/user-${ctx.user.id}-${nanoid(8)}.${ext}`;
+        const { url } = await storagePut(fileKey, buffer, input.mimeType);
+        // Update user avatarUrl
+        await db.update(users).set({ avatarUrl: url }).where(eq(users.id, ctx.user.id));
+        return { url };
+      }),
+  }),
+  // ─── Smart Contracts ─────────────────────────────────────────────────────
+  contracts: router({
+    // List smart contracts for a master
+    list: protectedProcedure
+      .input(z.object({ masterId: z.number().optional() }))
+      .query(async ({ ctx, input }) => {
+        const db = await getDb();
+        if (!db) return [];
+        const master = await getMasterByUserId(ctx.user.id);
+        const targetMasterId = input.masterId ?? master?.id;
+        if (!targetMasterId) return [];
+        return db.select().from(smartContracts)
+          .where(eq(smartContracts.masterId, targetMasterId))
+          .orderBy(smartContracts.createdAt);
+      }),
+    // Create early bird contract for an article
+    createEarlyBird: protectedProcedure
+      .input(z.object({
+        articleId: z.number(),
+        slots: z.number().min(1).max(100).default(10),
+        sharePct: z.number().min(1).max(20).default(5),
+        terms: z.string().optional(),
+        expiresAt: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        const master = await getMasterByUserId(ctx.user.id);
+        if (!master) throw new TRPCError({ code: "FORBIDDEN", message: "需要 Master 身份" });
+        await db.insert(smartContracts).values({
+          contractType: "early_bird",
+          articleId: input.articleId,
+          masterId: master.id,
+          earlyBirdSlots: input.slots,
+          earlyBirdSharePct: input.sharePct,
+          terms: input.terms,
+          expiresAt: input.expiresAt ? new Date(input.expiresAt) : undefined,
+        });
+        return { success: true };
+      }),
+    // Create revenue right contract
+    createRevenueRight: protectedProcedure
+      .input(z.object({
+        articleId: z.number(),
+        revenueSharePct: z.number().min(1).max(50),
+        salePrice: z.number().min(100), // in cents
+        terms: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        const master = await getMasterByUserId(ctx.user.id);
+        if (!master) throw new TRPCError({ code: "FORBIDDEN", message: "需要 Master 身份" });
+        await db.insert(smartContracts).values({
+          contractType: "revenue_right",
+          articleId: input.articleId,
+          masterId: master.id,
+          revenueSharePct: input.revenueSharePct,
+          salePrice: input.salePrice,
+          terms: input.terms,
+        });
+        return { success: true };
+      }),
+    // Admin: list all contracts
+    adminList: adminProcedure
+      .query(async () => {
+        const db = await getDb();
+        if (!db) return [];
+        return db.select().from(smartContracts).orderBy(smartContracts.createdAt);
+      }),
+  }),
+  // ─── Content Moderation ──────────────────────────────────────────────────
+  moderation: router({
+    // Auto-moderate content using LLM
+    autoModerate: protectedProcedure
+      .input(z.object({
+        content: z.string(),
+        contentType: z.enum(["article", "bounty", "comment"]),
+        articleId: z.number().optional(),
+        bountyId: z.number().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        // LLM compliance + desensitization check
+        const response = await invokeLLM({
+          messages: [
+            {
+              role: "system",
+              content: `你是一个半导体行业内容安全专家。请对以下内容进行：
+1. 合规检测：检查是否包含NDA保护信息、客户数据、虚假信息
+2. 敏感词识别：识别可能涉及商业机密的词汇
+3. 脱敏建议：对敏感内容提供脱敏版本
+
+以JSON格式返回：
+{
+  "complianceScore": 0-100,
+  "passed": true/false,
+  "sensitiveWordsFound": ["word1", "word2"],
+  "redactedContent": "脱敏后的内容（如无需脱敏则返回原文）",
+  "issues": ["问题1", "问题2"],
+  "suggestion": "改进建议"
+}`,
+            },
+            { role: "user", content: input.content },
+          ],
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: "moderation_result",
+              strict: true,
+              schema: {
+                type: "object",
+                properties: {
+                  complianceScore: { type: "number" },
+                  passed: { type: "boolean" },
+                  sensitiveWordsFound: { type: "array", items: { type: "string" } },
+                  redactedContent: { type: "string" },
+                  issues: { type: "array", items: { type: "string" } },
+                  suggestion: { type: "string" },
+                },
+                required: ["complianceScore", "passed", "sensitiveWordsFound", "redactedContent", "issues", "suggestion"],
+                additionalProperties: false,
+              },
+            },
+          },
+        });
+        const result = JSON.parse(response.choices[0]?.message?.content as string ?? "{}");
+        // Save moderation log
+        await db.insert(contentModerationLogs).values({
+          contentType: input.contentType,
+          articleId: input.articleId,
+          bountyId: input.bountyId,
+          complianceScore: result.complianceScore ?? 0,
+          passed: result.passed ?? false,
+          sensitiveWordsFound: result.sensitiveWordsFound ?? [],
+          redactedContent: result.redactedContent,
+          issues: result.issues ?? [],
+          suggestion: result.suggestion,
+          triggeredBy: "auto",
+        });
+        return result;
+      }),
+    // Admin: list moderation logs
+    logs: adminProcedure
+      .input(z.object({ page: z.number().default(1), limit: z.number().default(20) }).optional())
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) return { logs: [], total: 0 };
+        const page = input?.page ?? 1;
+        const limit = input?.limit ?? 20;
+        const offset = (page - 1) * limit;
+        const logs = await db.select().from(contentModerationLogs)
+          .orderBy(contentModerationLogs.createdAt)
+          .limit(limit).offset(offset);
+        return { logs, total: logs.length };
+      }),
+  }),
+  // ─── AI Master Config ─────────────────────────────────────────────────────
+  aiConfig: router({
+    // Get AI config for current master
+    get: protectedProcedure
+      .query(async ({ ctx }) => {
+        const db = await getDb();
+        if (!db) return null;
+        const master = await getMasterByUserId(ctx.user.id);
+        if (!master) return null;
+        const configs = await db.select().from(aiMasterConfigs)
+          .where(eq(aiMasterConfigs.masterId, master.id)).limit(1);
+        const config = configs[0];
+        if (!config) return null;
+        // Mask API key for security
+        return { ...config, apiKey: config.apiKey ? "***" + config.apiKey.slice(-4) : null };
+      }),
+    // Save AI config (create or update)
+    save: protectedProcedure
+      .input(z.object({
+        modelProvider: z.enum(["builtin", "qwen", "glm", "minimax", "openai", "anthropic", "custom"]),
+        apiKey: z.string().optional(),
+        apiEndpoint: z.string().optional(),
+        modelName: z.string().optional(),
+        systemPrompt: z.string().optional(),
+        researchPrompt: z.string().optional(),
+        writingPrompt: z.string().optional(),
+        researchTopics: z.array(z.string()).optional(),
+        targetLanguages: z.array(z.string()).optional(),
+        autoPublish: z.boolean().optional(),
+        publishSchedule: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        const master = await getMasterByUserId(ctx.user.id);
+        if (!master) throw new TRPCError({ code: "FORBIDDEN", message: "需要 Master 身份" });
+        const existing = await db.select().from(aiMasterConfigs)
+          .where(eq(aiMasterConfigs.masterId, master.id)).limit(1);
+        const updateData: Record<string, unknown> = { ...input };
+        // Don't overwrite API key if masked
+        if (input.apiKey === undefined || input.apiKey?.startsWith("***")) {
+          delete updateData.apiKey;
+        }
+        if (existing.length > 0) {
+          await db.update(aiMasterConfigs).set(updateData)
+            .where(eq(aiMasterConfigs.masterId, master.id));
+        } else {
+          await db.insert(aiMasterConfigs).values({ masterId: master.id, ...updateData });
+        }
+        return { success: true };
+      }),
+    // Admin: get any master's AI config
+    adminGet: adminProcedure
+      .input(z.object({ masterId: z.number() }))
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) return null;
+        const configs = await db.select().from(aiMasterConfigs)
+          .where(eq(aiMasterConfigs.masterId, input.masterId)).limit(1);
+        const config = configs[0];
+        if (!config) return null;
+        return { ...config, apiKey: config.apiKey ? "***" + config.apiKey.slice(-4) : null };
+      }),
+    // Admin: save any master's AI config
+    adminSave: adminProcedure
+      .input(z.object({
+        masterId: z.number(),
+        modelProvider: z.enum(["builtin", "qwen", "glm", "minimax", "openai", "anthropic", "custom"]),
+        apiKey: z.string().optional(),
+        apiEndpoint: z.string().optional(),
+        modelName: z.string().optional(),
+        systemPrompt: z.string().optional(),
+        researchPrompt: z.string().optional(),
+        writingPrompt: z.string().optional(),
+        researchTopics: z.array(z.string()).optional(),
+        targetLanguages: z.array(z.string()).optional(),
+        autoPublish: z.boolean().optional(),
+        publishSchedule: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        const existing = await db.select().from(aiMasterConfigs)
+          .where(eq(aiMasterConfigs.masterId, input.masterId)).limit(1);
+        const { masterId, ...rest } = input;
+        const updateData: Record<string, unknown> = { ...rest };
+        if (rest.apiKey === undefined || rest.apiKey?.startsWith("***")) {
+          delete updateData.apiKey;
+        }
+        if (existing.length > 0) {
+          await db.update(aiMasterConfigs).set(updateData)
+            .where(eq(aiMasterConfigs.masterId, masterId));
+        } else {
+          await db.insert(aiMasterConfigs).values({ masterId, ...updateData });
+        }
         return { success: true };
       }),
   }),

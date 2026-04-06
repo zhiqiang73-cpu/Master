@@ -7,8 +7,8 @@
 /* ── Master.AI Design Tokens: 日式物哀美学 × 电路蓝图 ── */
 
 @theme inline {
-  --font-sans: 'Outfit', 'Noto Sans SC', 'Noto Sans JP', sans-serif;
-  --font-mono: 'Fira Code', monospace;
+  --font-sans: var(--font-body, 'Noto Sans SC', 'Outfit', sans-serif);
+  --font-mono: var(--font-mono, 'Fira Code', monospace);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);

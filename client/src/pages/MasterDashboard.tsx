@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
+import AiAssistantPanel from "@/components/AiAssistantPanel";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -208,7 +209,30 @@ export default function MasterDashboard() {
               <Award className="w-3.5 h-3.5" />
               个人资料
             </TabsTrigger>
+            <TabsTrigger value="ai-assistant" className="gap-1.5">
+              <Zap className="w-3.5 h-3.5" />
+              AI 助手
+            </TabsTrigger>
           </TabsList>
+
+          {/* Quick links row */}
+          <div className="flex flex-wrap gap-2 mb-5">
+            <Link href="/master/ai-config">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors cursor-pointer border border-blue-200">
+                🤖 AI Master 配置
+              </span>
+            </Link>
+            <Link href="/master/revenue">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-green-50 text-green-700 hover:bg-green-100 transition-colors cursor-pointer border border-green-200">
+                💰 收入一览
+              </span>
+            </Link>
+            <Link href="/master/contracts">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors cursor-pointer border border-amber-200">
+                📜 智能合约
+              </span>
+            </Link>
+          </div>
 
           {/* Articles Tab */}
           <TabsContent value="articles">
@@ -472,6 +496,11 @@ export default function MasterDashboard() {
                 )}
               </div>
             )}
+          </TabsContent>
+
+          {/* AI Assistant Tab */}
+          <TabsContent value="ai-assistant">
+            <AiAssistantPanel />
           </TabsContent>
         </Tabs>
       </main>

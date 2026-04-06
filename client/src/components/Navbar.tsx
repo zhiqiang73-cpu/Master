@@ -11,27 +11,21 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Menu, X, ChevronDown, Globe, Search } from "lucide-react";
+import { useI18n, type Language } from "@/contexts/I18nContext";
 
-const navLinks = [
-  { href: "/", label: "首页", labelEn: "Home", labelJa: "ホーム" },
-  { href: "/insights", label: "洞察", labelEn: "Insights", labelJa: "洞察" },
-  { href: "/subscribe", label: "订阅", labelEn: "Subscribe", labelJa: "購読" },
-  { href: "/bounties", label: "悬赏", labelEn: "Bounties", labelJa: "懸賞" },
-];
-
-const langOptions = [
-  { code: "zh", label: "中文", flag: "🇨🇳" },
-  { code: "en", label: "English", flag: "🇬🇧" },
-  { code: "ja", label: "日本語", flag: "🇯🇵" },
+const langOptions: { code: Language; label: string; flag: string; short: string }[] = [
+  { code: "zh", label: "中文", flag: "🇨🇳", short: "中文" },
+  { code: "en", label: "English", flag: "🇬🇧", short: "EN" },
+  { code: "ja", label: "日本語", flag: "🇯🇵", short: "JP" },
 ];
 
 export default function Navbar() {
   const [location] = useLocation();
   const { user, isAuthenticated, logout } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [lang, setLang] = useState("zh");
+  const { lang, setLang, t } = useI18n();
 
   const logoutMutation = trpc.auth.logout.useMutation({
     onSuccess: () => {
@@ -40,11 +34,14 @@ export default function Navbar() {
     },
   });
 
-  const getLabel = (link: typeof navLinks[0]) => {
-    if (lang === "en") return link.labelEn;
-    if (lang === "ja") return link.labelJa;
-    return link.label;
-  };
+  const navLinks = [
+    { href: "/", label: t.nav.home },
+    { href: "/insights", label: t.nav.insights },
+    { href: "/subscribe", label: t.nav.subscribe },
+    { href: "/bounties", label: t.nav.bounties },
+  ];
+
+  const currentLang = langOptions.find(l => l.code === lang)!;
 
   return (
     <header className="sticky top-0 z-50 bg-background/90 backdrop-blur-md border-b border-border">
@@ -76,7 +73,7 @@ export default function Navbar() {
                   : "text-muted-foreground hover:text-foreground hover:bg-muted"
               }`}
             >
-              {getLabel(link)}
+              {link.label}
             </Link>
           ))}
         </div>
@@ -86,10 +83,10 @@ export default function Navbar() {
           {/* Language Switcher */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="gap-1 text-xs font-mono text-muted-foreground">
+              <Button variant="ghost" size="sm" className="gap-1 text-xs font-mono text-muted-foreground h-8 px-2">
                 <Globe className="w-3.5 h-3.5" />
-                {langOptions.find(l => l.code === lang)?.flag}
-                {lang === "zh" ? "中文" : lang === "en" ? "EN" : "JP"}
+                <span>{currentLang.flag}</span>
+                <span className="hidden sm:inline">{currentLang.short}</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-36">
@@ -97,10 +94,11 @@ export default function Navbar() {
                 <DropdownMenuItem
                   key={opt.code}
                   onClick={() => setLang(opt.code)}
-                  className={lang === opt.code ? "text-[var(--patina)]" : ""}
+                  className={`cursor-pointer ${lang === opt.code ? "text-[var(--patina)] font-medium" : ""}`}
                 >
-                  <span className="mr-2">{opt.flag}</span>
+                  <span className="mr-2 text-base">{opt.flag}</span>
                   {opt.label}
+                  {lang === opt.code && <span className="ml-auto text-[var(--patina)]">✓</span>}
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>
@@ -117,6 +115,7 @@ export default function Navbar() {
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="sm" className="gap-2 h-8">
                   <Avatar className="w-6 h-6">
+                    {(user as any).avatarUrl && <AvatarImage src={(user as any).avatarUrl} alt={user.name ?? ""} />}
                     <AvatarFallback className="text-xs bg-[var(--patina)] text-white">
                       {user.name?.charAt(0)?.toUpperCase() ?? "U"}
                     </AvatarFallback>
@@ -132,30 +131,30 @@ export default function Navbar() {
                 </div>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
-                  <Link href="/dashboard">个人中心</Link>
+                  <Link href="/dashboard">{t.nav.dashboard}</Link>
                 </DropdownMenuItem>
                 {(user.role === "master" || user.role === "admin") && (
                   <DropdownMenuItem asChild>
-                    <Link href="/master/dashboard">Master 面板</Link>
+                    <Link href="/master/dashboard">{t.nav.masterDashboard}</Link>
                   </DropdownMenuItem>
                 )}
                 {user.role === "admin" && (
                   <DropdownMenuItem asChild>
-                    <Link href="/admin">管理后台</Link>
+                    <Link href="/admin">{t.nav.admin}</Link>
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={() => logoutMutation.mutate()}
-                  className="text-destructive"
+                  className="text-destructive cursor-pointer"
                 >
-                  退出登录
+                  {t.nav.logout}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
             <Button asChild size="sm" className="h-8 bg-[var(--patina)] hover:bg-[var(--patina-dark)] text-white text-xs">
-              <Link href="/login">登录</Link>
+              <Link href="/login">{t.nav.login}</Link>
             </Button>
           )}
 
@@ -189,9 +188,25 @@ export default function Navbar() {
                   onClick={() => setMobileOpen(false)}
                   className="px-3 py-2 text-sm font-medium rounded-md text-muted-foreground hover:text-foreground hover:bg-muted"
                 >
-                  {getLabel(link)}
+                  {link.label}
                 </Link>
               ))}
+              {/* Language switcher in mobile */}
+              <div className="pt-2 border-t border-border mt-1 flex gap-2">
+                {langOptions.map(opt => (
+                  <button
+                    key={opt.code}
+                    onClick={() => { setLang(opt.code); setMobileOpen(false); }}
+                    className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
+                      lang === opt.code
+                        ? "bg-[var(--patina)]/15 text-[var(--patina)]"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {opt.flag} {opt.short}
+                  </button>
+                ))}
+              </div>
             </div>
           </motion.div>
         )}

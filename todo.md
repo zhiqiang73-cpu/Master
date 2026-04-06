@@ -60,7 +60,7 @@
 ## Phase 7: Integration & Seed Data
 - [x] 数据库迁移执行
 - [x] 种子数据注入（2位Master、3篇文章、2个悬赏、3个邀请码）
-- [ ] Stripe支付集成（需要Stripe密钥）
+- [ ] Stripe支付集成（需要Stripe密钥，Phase 2 实现）
 - [ ] 邮件推送通知（可选增强）
 - [x] 全流程测试
 - [x] Vitest单元测试（18个测试全部通过）
@@ -86,3 +86,25 @@
 - [x] 文章发布时自动通知订阅者
 - [x] 取消订阅页面（/unsubscribe?token=xxx）
 - [x] 订阅成功确认提示
+
+## Phase 10: 修复与功能完善（用户反馈）
+- [x] 修复邀请码页面404（/admin/invite-codes 路由）
+- [x] 修复 Master 公开主页（/master/:alias 页面路由顺序）
+- [x] 全站多语言切换（中/英/日），字体联动（Noto Sans SC / Noto Serif JP / Inter）
+- [x] 管理员账号说明（Manus OAuth 自动识别 Owner 为 Admin）
+- [x] 内容自动脱敏机制（LLM 合规检测自动触发于提交审核流程）
+- [x] 智能合约模块（早期发现者分成、文章收益权记录）
+- [x] 头像上传功能（S3 存储 + 个人资料编辑）
+- [x] AI Master 多模型 API 配置（Qwen/GLM/MiniMax 等入口）
+- [x] AI Master 个性化提示词配置
+- [x] Master 用户可创建 AI Master 的权限（AI 助手 Tab）
+- [x] Master 收入一览表（预留面板）
+
+## Phase 11: 最终完善
+- [x] 种子数据：管理员账号 admin@masterai.com / Admin@2026
+- [x] 种子数据：测试 Master 账号 master1@test.com / Master@123
+- [x] 种子数据：测试用户账号 member1@test.com / Member@123
+- [x] 种子数据：邀请码 MASTER2026 / SEMI2026 / EARLYBIRD
+- [x] 内容审核自动集成到文章提交流程
+- [x] 18 个 Vitest 测试全部通过
+- [x] TypeScript 零错误

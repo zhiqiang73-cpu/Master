@@ -15,6 +15,13 @@
       "when": 1775431997894,
       "tag": "0001_even_blob",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1775438270118,
+      "tag": "0002_happy_anita_blake",
+      "breakpoints": true
     }
   ]
 }

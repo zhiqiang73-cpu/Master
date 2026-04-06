@@ -5,9 +5,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Loader2, Bot, Play, Plus, RefreshCw, CheckCircle, XCircle, Clock } from "lucide-react";
+import { Loader2, Bot, Play, Plus, RefreshCw, CheckCircle, XCircle, Clock, Settings, Cpu, FileText } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const STATUS_ICONS: Record<string, React.ReactNode> = {
   pending: <Clock className="w-3.5 h-3.5 text-yellow-500" />,
@@ -20,11 +22,52 @@ const STATUS_LABELS: Record<string, string> = {
   pending: "等待中", running: "运行中", completed: "已完成", failed: "失败",
 };
 
+const PROVIDER_LABELS: Record<string, string> = {
+  builtin: "🔵 内置模型",
+  qwen: "🇨🇳 通义千问",
+  glm: "🇨🇳 智谱 GLM",
+  minimax: "🇨🇳 MiniMax",
+  openai: "🇺🇸 OpenAI",
+  custom: "⚙️ 自定义",
+};
+
+type LLMProvider = "builtin" | "qwen" | "glm" | "minimax" | "openai" | "custom";
+
+interface MasterForm {
+  displayName: string;
+  alias: string;
+  bio: string;
+  expertise: string;
+  llmProvider: LLMProvider;
+  llmApiKey: string;
+  llmBaseUrl: string;
+  llmModel: string;
+  systemPrompt: string;
+  researchDirections: string;
+}
+
+const DEFAULT_MASTER_FORM: MasterForm = {
+  displayName: "", alias: "", bio: "", expertise: "",
+  llmProvider: "builtin",
+  llmApiKey: "", llmBaseUrl: "", llmModel: "",
+  systemPrompt: "",
+  researchDirections: "",
+};
+
+const PROVIDER_PLACEHOLDERS: Record<LLMProvider, { apiKey: string; baseUrl: string; model: string }> = {
+  builtin: { apiKey: "", baseUrl: "", model: "" },
+  qwen: { apiKey: "sk-xxxx（阿里云百炼 API Key）", baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1", model: "qwen-plus" },
+  glm: { apiKey: "xxxx（智谱 AI API Key）", baseUrl: "https://open.bigmodel.cn/api/paas/v4", model: "glm-4" },
+  minimax: { apiKey: "xxxx（MiniMax API Key）", baseUrl: "https://api.minimax.chat/v1", model: "abab6.5s-chat" },
+  openai: { apiKey: "sk-xxxx", baseUrl: "https://api.openai.com/v1", model: "gpt-4o" },
+  custom: { apiKey: "your-api-key", baseUrl: "https://your-api-base-url/v1", model: "your-model-name" },
+};
+
 export default function AdminAgents() {
   const [showCreate, setShowCreate] = useState(false);
   const [showCreateMaster, setShowCreateMaster] = useState(false);
   const [taskForm, setTaskForm] = useState({ masterId: "", taskType: "write" as const, instruction: "", searchTopics: "" });
-  const [masterForm, setMasterForm] = useState({ displayName: "", alias: "", bio: "", expertise: "" });
+  const [masterForm, setMasterForm] = useState<MasterForm>(DEFAULT_MASTER_FORM);
   const utils = trpc.useUtils();
 
   const { data: tasks, isLoading } = trpc.agent.listTasks.useQuery({});
@@ -39,11 +82,13 @@ export default function AdminAgents() {
     onError: (e: any) => toast.error(e.message),
   });
   const createMasterMutation = trpc.admin.createAiMaster.useMutation({
-    onSuccess: () => { toast.success("AI Master 已创建！"); setShowCreateMaster(false); utils.admin.listMasters.invalidate(); },
+    onSuccess: () => { toast.success("AI Master 已创建！"); setShowCreateMaster(false); setMasterForm(DEFAULT_MASTER_FORM); utils.admin.listMasters.invalidate(); },
     onError: (e: any) => toast.error(e.message),
   });
 
   const taskList = Array.isArray(tasks) ? tasks : [];
+  const aiMasters = (masters ?? []).filter((m: any) => m.isAiAgent);
+  const ph = PROVIDER_PLACEHOLDERS[masterForm.llmProvider];
 
   return (
     <div className="p-6">
@@ -63,11 +108,11 @@ export default function AdminAgents() {
       </div>
 
       {/* AI Masters list */}
-      {(masters ?? []).filter((m: any) => m.isAiAgent).length > 0 && (
+      {aiMasters.length > 0 && (
         <div className="mb-6">
           <h2 className="text-sm font-medium mb-3">AI Master 列表</h2>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            {(masters ?? []).filter((m: any) => m.isAiAgent).map((m: any) => (
+            {aiMasters.map((m: any) => (
               <div key={m.id} className="p-3 bg-card border border-border rounded-lg">
                 <div className="flex items-center gap-2 mb-1">
                   <Bot className="w-3.5 h-3.5 text-purple-500" />
@@ -138,7 +183,7 @@ export default function AdminAgents() {
               <Select value={taskForm.masterId} onValueChange={v => setTaskForm(f => ({ ...f, masterId: v }))}>
                 <SelectTrigger className="mt-1"><SelectValue placeholder="选择 Master" /></SelectTrigger>
                 <SelectContent>
-                  {(masters ?? []).filter((m: any) => m.isAiAgent).map((m: any) => (
+                  {aiMasters.map((m: any) => (
                     <SelectItem key={m.id} value={String(m.id)}>{m.displayName}</SelectItem>
                   ))}
                 </SelectContent>
@@ -178,39 +223,169 @@ export default function AdminAgents() {
         </DialogContent>
       </Dialog>
 
-      {/* Create AI Master Dialog */}
+      {/* Create AI Master Dialog - Full Config */}
       <Dialog open={showCreateMaster} onOpenChange={setShowCreateMaster}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle>创建 AI Master</DialogTitle></DialogHeader>
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label className="text-xs">显示名称 *</Label>
-                <Input placeholder="例如：芯片观察者" value={masterForm.displayName} onChange={e => setMasterForm(f => ({ ...f, displayName: e.target.value }))} className="mt-1" />
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Bot className="w-4 h-4 text-[var(--patina)]" />
+              创建 AI Master
+            </DialogTitle>
+          </DialogHeader>
+
+          <Tabs defaultValue="basic" className="mt-2">
+            <TabsList className="grid grid-cols-3 w-full">
+              <TabsTrigger value="basic" className="text-xs gap-1"><FileText className="w-3 h-3" /> 基本信息</TabsTrigger>
+              <TabsTrigger value="model" className="text-xs gap-1"><Cpu className="w-3 h-3" /> AI 模型</TabsTrigger>
+              <TabsTrigger value="prompt" className="text-xs gap-1"><Settings className="w-3 h-3" /> 个性化提示词</TabsTrigger>
+            </TabsList>
+
+            {/* Tab 1: Basic Info */}
+            <TabsContent value="basic" className="space-y-4 mt-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs">显示名称 *</Label>
+                  <Input placeholder="例如：芯片观察者" value={masterForm.displayName} onChange={e => setMasterForm(f => ({ ...f, displayName: e.target.value }))} className="mt-1" />
+                </div>
+                <div>
+                  <Label className="text-xs">别名 (URL) *</Label>
+                  <Input placeholder="例如：chip-observer" value={masterForm.alias} onChange={e => setMasterForm(f => ({ ...f, alias: e.target.value }))} className="mt-1" />
+                  <p className="text-[10px] text-muted-foreground mt-1">访问地址：/master/{masterForm.alias || "chip-observer"}</p>
+                </div>
               </div>
               <div>
-                <Label className="text-xs">别名 (URL) *</Label>
-                <Input placeholder="例如：chip-observer" value={masterForm.alias} onChange={e => setMasterForm(f => ({ ...f, alias: e.target.value }))} className="mt-1" />
+                <Label className="text-xs">简介</Label>
+                <Textarea placeholder="AI Master 的专业背景和研究方向..." value={masterForm.bio} onChange={e => setMasterForm(f => ({ ...f, bio: e.target.value }))} className="mt-1" rows={3} />
               </div>
-            </div>
-            <div>
-              <Label className="text-xs">简介</Label>
-              <Textarea placeholder="AI Master 的专业背景和研究方向..." value={masterForm.bio} onChange={e => setMasterForm(f => ({ ...f, bio: e.target.value }))} className="mt-1" rows={2} />
-            </div>
-            <div>
-              <Label className="text-xs">专业领域（逗号分隔）</Label>
-              <Input placeholder="例如：先进封装, EUV光刻, 存储芯片" value={masterForm.expertise} onChange={e => setMasterForm(f => ({ ...f, expertise: e.target.value }))} className="mt-1" />
-            </div>
-            <Button className="w-full bg-[var(--patina)] hover:bg-[var(--patina-dark)] text-white"
+              <div>
+                <Label className="text-xs">专业领域（逗号分隔）</Label>
+                <Input placeholder="例如：先进封装, EUV光刻, 存储芯片" value={masterForm.expertise} onChange={e => setMasterForm(f => ({ ...f, expertise: e.target.value }))} className="mt-1" />
+              </div>
+            </TabsContent>
+
+            {/* Tab 2: AI Model Config */}
+            <TabsContent value="model" className="space-y-4 mt-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-700">
+                🤖 选择驱动此 AI Master 的大语言模型。选择「内置模型」无需配置，其他模型需要提供对应的 API Key。
+              </div>
+              <div>
+                <Label className="text-xs">模型提供商</Label>
+                <Select value={masterForm.llmProvider} onValueChange={v => setMasterForm(f => ({ ...f, llmProvider: v as LLMProvider, llmApiKey: "", llmBaseUrl: "", llmModel: "" }))}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="builtin">🔵 内置模型（免配置，推荐）</SelectItem>
+                    <SelectItem value="qwen">🇨🇳 通义千问 Qwen（阿里云）</SelectItem>
+                    <SelectItem value="glm">🇨🇳 智谱 GLM（智谱AI）</SelectItem>
+                    <SelectItem value="minimax">🇨🇳 MiniMax（海南科技）</SelectItem>
+                    <SelectItem value="openai">🇺🇸 OpenAI / GPT-4</SelectItem>
+                    <SelectItem value="custom">⚙️ 自定义 API（OpenAI 兼容）</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {masterForm.llmProvider !== "builtin" && (
+                <>
+                  <div>
+                    <Label className="text-xs flex items-center gap-1">
+                      API Key *
+                      <Badge variant="secondary" className="text-[10px] px-1 py-0">{PROVIDER_LABELS[masterForm.llmProvider]}</Badge>
+                    </Label>
+                    <Input
+                      type="password"
+                      placeholder={ph.apiKey}
+                      value={masterForm.llmApiKey}
+                      onChange={e => setMasterForm(f => ({ ...f, llmApiKey: e.target.value }))}
+                      className="mt-1 font-mono text-xs"
+                    />
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                      {masterForm.llmProvider === "qwen" && "前往 https://dashscope.aliyun.com 获取 API Key"}
+                      {masterForm.llmProvider === "glm" && "前往 https://open.bigmodel.cn 获取 API Key"}
+                      {masterForm.llmProvider === "minimax" && "前往 https://platform.minimaxi.com 获取 API Key"}
+                      {masterForm.llmProvider === "openai" && "前往 https://platform.openai.com 获取 API Key"}
+                      {masterForm.llmProvider === "custom" && "填入您的 OpenAI 兼容 API Key"}
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-xs">Base URL（可选）</Label>
+                      <Input
+                        placeholder={ph.baseUrl}
+                        value={masterForm.llmBaseUrl}
+                        onChange={e => setMasterForm(f => ({ ...f, llmBaseUrl: e.target.value }))}
+                        className="mt-1 font-mono text-xs"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">模型名称（可选）</Label>
+                      <Input
+                        placeholder={ph.model}
+                        value={masterForm.llmModel}
+                        onChange={e => setMasterForm(f => ({ ...f, llmModel: e.target.value }))}
+                        className="mt-1 font-mono text-xs"
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {masterForm.llmProvider === "builtin" && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-xs text-green-700">
+                  ✅ 使用内置模型，无需任何配置。AI Master 将使用平台默认的高质量大语言模型进行写作。
+                </div>
+              )}
+            </TabsContent>
+
+            {/* Tab 3: Personalized Prompts */}
+            <TabsContent value="prompt" className="space-y-4 mt-4">
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-700">
+                ✍️ 个性化提示词决定了 AI Master 的写作风格、专业深度和研究方向。精心设计的提示词能显著提升文章质量。
+              </div>
+              <div>
+                <Label className="text-xs">系统提示词（System Prompt）</Label>
+                <Textarea
+                  placeholder={`例如：你是一个专注于半导体先进封装工艺的行业分析师。你的文章风格简洁、数据驱动，善于将复杂技术转化为商业洞察。常用中文撰写，必要时提供英文或日文版本。你的分析总是基于最新的行业数据和供应链动态，避免泛泛而谈，注重具体的技术细节和市场影响。`}
+                  value={masterForm.systemPrompt}
+                  onChange={e => setMasterForm(f => ({ ...f, systemPrompt: e.target.value }))}
+                  className="mt-1 text-xs"
+                  rows={5}
+                />
+                <p className="text-[10px] text-muted-foreground mt-1">定义 AI Master 的身份、专业背景、写作风格和语言偏好</p>
+              </div>
+              <div>
+                <Label className="text-xs">研究方向（每行一个主题）</Label>
+                <Textarea
+                  placeholder={`例如：\nCoWoS 先进封装技术进展\nHBM4 内存市场动态\n台积电 3nm 以下工艺成本分析\nChiplet 互联标准之争（UCIe vs OpenHBI）\n中国先进封装产能追赶情况`}
+                  value={masterForm.researchDirections}
+                  onChange={e => setMasterForm(f => ({ ...f, researchDirections: e.target.value }))}
+                  className="mt-1 text-xs font-mono"
+                  rows={5}
+                />
+                <p className="text-[10px] text-muted-foreground mt-1">每个方向将作为自动写作任务的默认搜索主题，AI Master 会定期围绕这些方向产出内容</p>
+              </div>
+            </TabsContent>
+          </Tabs>
+
+          <div className="mt-4 pt-4 border-t border-border">
+            <Button
+              className="w-full bg-[var(--patina)] hover:bg-[var(--patina-dark)] text-white"
               disabled={createMasterMutation.isPending || !masterForm.displayName || !masterForm.alias}
               onClick={() => createMasterMutation.mutate({
                 displayName: masterForm.displayName,
                 alias: masterForm.alias,
                 bio: masterForm.bio,
                 expertise: masterForm.expertise.split(",").map((s: string) => s.trim()).filter(Boolean),
-              })}>
-              {createMasterMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "创建 AI Master"}
+              })}
+            >
+              {createMasterMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Bot className="w-4 h-4 mr-2" />}
+              创建 AI Master
             </Button>
+            <p className="text-[10px] text-muted-foreground text-center mt-2">
+              {masterForm.llmProvider !== "builtin" && masterForm.llmApiKey ? "✅ 已配置自定义模型" : "使用内置模型"}
+              {masterForm.systemPrompt ? " · ✅ 已设置个性化提示词" : ""}
+              {masterForm.researchDirections ? " · ✅ 已设置研究方向" : ""}
+            </p>
           </div>
         </DialogContent>
       </Dialog>

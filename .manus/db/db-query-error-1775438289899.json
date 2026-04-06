@@ -1,0 +1,16 @@
+{
+  "query": "CREATE TABLE `content_moderation_logs` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`articleId` int,\n\t`bountyId` int,\n\t`contentType` enum('article','bounty','comment') NOT NULL,\n\t`complianceScore` int DEFAULT 0,\n\t`passed` boolean NOT NULL DEFAULT false,\n\t`sensitiveWordsFound` json DEFAULT ('[]'),\n\t`redactedContent` text,\n\t`issues` json DEFAULT ('[]'),\n\t`suggestion` text,\n\t`triggeredBy` enum('auto','manual','appeal') NOT NULL DEFAULT 'auto',\n\t`reviewedBy` int,\n\t`createdAt` timestamp NOT NULL DEFAULT (now()),\n\tCONSTRAINT `content_moderation_logs_id` PRIMARY KEY(`id`)\n)",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 44k1efRsdsVyDeY.root --database 8CrHDvBhNX8k2hxK9ZrGb8 --execute CREATE TABLE `content_moderation_logs` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`articleId` int,\n\t`bountyId` int,\n\t`contentType` enum('article','bounty','comment') NOT NULL,\n\t`complianceScore` int DEFAULT 0,\n\t`passed` boolean NOT NULL DEFAULT false,\n\t`sensitiveWordsFound` json DEFAULT ('[]'),\n\t`redactedContent` text,\n\t`issues` json DEFAULT ('[]'),\n\t`suggestion` text,\n\t`triggeredBy` enum('auto','manual','appeal') NOT NULL DEFAULT 'auto',\n\t`reviewedBy` int,\n\t`createdAt` timestamp NOT NULL DEFAULT (now()),\n\tCONSTRAINT `content_moderation_logs_id` PRIMARY KEY(`id`)\n)",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1064 (42000) at line 1: You have an error in your SQL syntax; check the manual that corresponds to your TiDB version for the right syntax to use line 8 column 42 near \"'[]'),",
+    "\t`redactedContent` text,",
+    "\t`issues` json DEFAULT ('[]'),",
+    "\t`suggestion` text,",
+    "\t`triggeredBy` enum('auto','manual','appeal') NOT NULL DEFAULT 'auto',",
+    "\t`reviewedBy` int,",
+    "\t`createdAt` timestamp NOT NULL DEFAULT (now()),",
+    "\tCONSTRAINT `content_moderation_logs_id` PRIMARY KEY(`id`)",
+    ")\""
+  ]
+}

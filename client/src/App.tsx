@@ -4,6 +4,7 @@ import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import { I18nProvider } from "./contexts/I18nContext";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
 import Articles from "./pages/Articles";
@@ -27,6 +28,9 @@ import AdminBounties from "./pages/admin/AdminBounties";
 import AdminInviteCodes from "./pages/admin/AdminInviteCodes";
 import AdminAgents from "./pages/admin/AdminAgents";
 import AdminSubscribers from "./pages/admin/AdminSubscribers";
+import AiMasterConfig from "./pages/AiMasterConfig";
+import SmartContracts from "./pages/SmartContracts";
+import MasterRevenue from "./pages/MasterRevenue";
 
 function Router() {
   return (
@@ -41,13 +45,16 @@ function Router() {
       <Route path="/article/:code" component={ArticleDetail} />
       <Route path="/bounties" component={Bounties} />
       <Route path="/bounty/:id" component={BountyDetail} />
+      <Route path="/master/dashboard" component={MasterDashboard} />
+      <Route path="/master/ai-config" component={AiMasterConfig} />
+      <Route path="/master/contracts" component={SmartContracts} />
+      <Route path="/master/revenue" component={MasterRevenue} />
       <Route path="/master/:alias" component={MasterProfile} />
       <Route path="/pricing" component={Pricing} />
       <Route path="/about" component={About} />
       <Route path="/contributor" component={Contributor} />
       <Route path="/unsubscribe" component={Unsubscribe} />
       <Route path="/dashboard" component={Dashboard} />
-      <Route path="/master/dashboard" component={MasterDashboard} />
       {/* Admin routes */}
       <Route path="/admin">
         {() => (
@@ -77,7 +84,7 @@ function Router() {
           </AdminLayout>
         )}
       </Route>
-      <Route path="/admin/invite-codes">
+      <Route path="/admin/invites">
         {() => (
           <AdminLayout>
             <AdminInviteCodes />
@@ -107,12 +114,14 @@ function Router() {
 function App() {
   return (
     <ErrorBoundary>
-      <ThemeProvider defaultTheme="light">
-        <TooltipProvider>
-          <Toaster />
-          <Router />
-        </TooltipProvider>
-      </ThemeProvider>
+      <I18nProvider>
+        <ThemeProvider defaultTheme="light">
+          <TooltipProvider>
+            <Toaster />
+            <Router />
+          </TooltipProvider>
+        </ThemeProvider>
+      </I18nProvider>
     </ErrorBoundary>
   );
 }

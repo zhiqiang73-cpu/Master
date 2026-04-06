@@ -1,0 +1,16 @@
+{
+  "query": "CREATE TABLE `ai_master_configs` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`masterId` int NOT NULL,\n\t`modelProvider` enum('builtin','qwen','glm','minimax','openai','anthropic','custom') NOT NULL DEFAULT 'builtin',\n\t`apiKey` text,\n\t`apiEndpoint` text,\n\t`modelName` text,\n\t`systemPrompt` text,\n\t`researchPrompt` text,\n\t`writingPrompt` text,\n\t`researchTopics` json DEFAULT ('[]'),\n\t`targetLanguages` json DEFAULT ('[\"zh\",\"en\",\"ja\"]'),\n\t`autoPublish` boolean NOT NULL DEFAULT false,\n\t`publishSchedule` varchar(50),\n\t`totalArticlesGenerated` int DEFAULT 0,\n\t`lastRunAt` timestamp,\n\t`createdAt` timestamp NOT NULL DEFAULT (now()),\n\t`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,\n\tCONSTRAINT `ai_master_configs_id` PRIMARY KEY(`id`),\n\tCONSTRAINT `ai_master_configs_masterId_unique` UNIQUE(`masterId`)\n)",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 44k1efRsdsVyDeY.root --database 8CrHDvBhNX8k2hxK9ZrGb8 --execute CREATE TABLE `ai_master_configs` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`masterId` int NOT NULL,\n\t`modelProvider` enum('builtin','qwen','glm','minimax','openai','anthropic','custom') NOT NULL DEFAULT 'builtin',\n\t`apiKey` text,\n\t`apiEndpoint` text,\n\t`modelName` text,\n\t`systemPrompt` text,\n\t`researchPrompt` text,\n\t`writingPrompt` text,\n\t`researchTopics` json DEFAULT ('[]'),\n\t`targetLanguages` json DEFAULT ('[\"zh\",\"en\",\"ja\"]'),\n\t`autoPublish` boolean NOT NULL DEFAULT false,\n\t`publishSchedule` varchar(50),\n\t`totalArticlesGenerated` int DEFAULT 0,\n\t`lastRunAt` timestamp,\n\t`createdAt` timestamp NOT NULL DEFAULT (now()),\n\t`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,\n\tCONSTRAINT `ai_master_configs_id` PRIMARY KEY(`id`),\n\tCONSTRAINT `ai_master_configs_masterId_unique` UNIQUE(`masterId`)\n)",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1064 (42000) at line 1: You have an error in your SQL syntax; check the manual that corresponds to your TiDB version for the right syntax to use line 11 column 37 near \"'[]'),",
+    "\t`targetLanguages` json DEFAULT ('[\"zh\",\"en\",\"ja\"]'),",
+    "\t`autoPublish` boolean NOT NULL DEFAULT false,",
+    "\t`publishSchedule` varchar(50),",
+    "\t`totalArticlesGenerated` int DEFAULT 0,",
+    "\t`lastRunAt` timestamp,",
+    "\t`createdAt` timestamp NOT NULL DEFAULT (now()),",
+    "\t`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,",
+    "\tCONSTRAINT `ai_master_configs_id`"
+  ]
+}

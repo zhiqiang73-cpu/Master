@@ -1,0 +1,9 @@
+{
+  "query": "CREATE TABLE `smart_contracts` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`contractType` enum('early_bird','revenue_right','bounty_split') NOT NULL,\n\t`articleId` int,\n\t`masterId` int NOT NULL,\n\t`userId` int,\n\t`earlyBirdSlots` int DEFAULT 10,\n\t`earlyBirdFilled` int DEFAULT 0,\n\t`earlyBirdSharePct` int DEFAULT 5,\n\t`revenueSharePct` int DEFAULT 0,\n\t`salePrice` int DEFAULT 0,\n\t`status` enum('active','fulfilled','expired','cancelled') NOT NULL DEFAULT 'active',\n\t`totalPaidOut` int DEFAULT 0,\n\t`terms` text,\n\t`expiresAt` timestamp,\n\t`createdAt` timestamp NOT NULL DEFAULT (now()),\n\t`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,\n\tCONSTRAINT `smart_contracts_id` PRIMARY KEY(`id`)\n)",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 44k1efRsdsVyDeY.root --database 8CrHDvBhNX8k2hxK9ZrGb8 --execute CREATE TABLE `smart_contracts` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`contractType` enum('early_bird','revenue_right','bounty_split') NOT NULL,\n\t`articleId` int,\n\t`masterId` int NOT NULL,\n\t`userId` int,\n\t`earlyBirdSlots` int DEFAULT 10,\n\t`earlyBirdFilled` int DEFAULT 0,\n\t`earlyBirdSharePct` int DEFAULT 5,\n\t`revenueSharePct` int DEFAULT 0,\n\t`salePrice` int DEFAULT 0,\n\t`status` enum('active','fulfilled','expired','cancelled') NOT NULL DEFAULT 'active',\n\t`totalPaidOut` int DEFAULT 0,\n\t`terms` text,\n\t`expiresAt` timestamp,\n\t`createdAt` timestamp NOT NULL DEFAULT (now()),\n\t`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,\n\tCONSTRAINT `smart_contracts_id` PRIMARY KEY(`id`)\n)",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 1806
+}
