@@ -8,24 +8,12 @@ import Footer from "@/components/Footer";
 import { trpc } from "@/lib/trpc";
 import { useI18n } from "@/contexts/I18nContext";
 
-// JOJO-style stand avatar URLs (CDN)
-const STAND_AVATARS = [
-  "https://d2xsxph8kpxj0f.cloudfront.net/310519663518526109/8CrHDvBhNX8k2hxK9ZrGb8/stand-chip-designer_51a86e1f.png",
-  "https://d2xsxph8kpxj0f.cloudfront.net/310519663518526109/8CrHDvBhNX8k2hxK9ZrGb8/stand-supply-chain_e0fbbc02.png",
-  "https://d2xsxph8kpxj0f.cloudfront.net/310519663518526109/8CrHDvBhNX8k2hxK9ZrGb8/stand-market-analyst_837c3fc5.png",
-  "https://d2xsxph8kpxj0f.cloudfront.net/310519663518526109/8CrHDvBhNX8k2hxK9ZrGb8/stand-geopolitics_6aefdc10.png",
-];
 
-const STAND_NAMES_ZH = ["芯片设计师", "供应链猎手", "市场分析师", "地缘棋手"];
-const STAND_NAMES_EN = ["Chip Designer", "Supply Hunter", "Market Analyst", "Geo Gambit"];
-const STAND_NAMES_JA = ["チップ設計師", "サプライハンター", "マーケットアナリスト", "地政棋士"];
 
 export default function Home() {
   const { lang } = useI18n();
   const { data: mastersData } = trpc.masters.list.useQuery({ limit: 4 });
   const masters = mastersData ?? [];
-
-  const standNames = lang === "en" ? STAND_NAMES_EN : lang === "ja" ? STAND_NAMES_JA : STAND_NAMES_ZH;
 
   const heroTitle = lang === "en"
     ? { line1: "Semiconductor Intelligence", line2: "Powered by AI Stands & Human Masters" }
@@ -50,11 +38,10 @@ export default function Home() {
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-background" />
 
         <div className="relative container py-20 md:py-28">
-          <div className="grid md:grid-cols-2 gap-12 items-center">
-            {/* Left: copy */}
+          <div className="max-w-2xl">
             <motion.div
-              initial={{ opacity: 0, x: -30 }}
-              animate={{ opacity: 1, x: 0 }}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6 }}
             >
               <Badge className="mb-4 bg-[var(--patina)]/10 text-[var(--patina)] border-[var(--patina)]/20 font-mono text-xs">
@@ -97,59 +84,6 @@ export default function Home() {
                   </div>
                 ))}
               </div>
-            </motion.div>
-
-            {/* Right: Stand circular avatars */}
-            <motion.div
-              initial={{ opacity: 0, x: 30 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.6, delay: 0.2 }}
-              className="relative flex flex-col items-center justify-center gap-8"
-            >
-              {/* Top row: 2 avatars */}
-              <div className="flex gap-8 justify-center">
-                {STAND_AVATARS.slice(0, 2).map((url, i) => (
-                  <motion.div
-                    key={i}
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.4, delay: 0.3 + i * 0.12 }}
-                    className="flex flex-col items-center gap-2 cursor-pointer group"
-                    onClick={() => window.location.href = "/stand"}
-                  >
-                    <div className="relative">
-                      <div className="w-24 h-24 rounded-full overflow-hidden border-2 border-[var(--patina)]/40 group-hover:border-[var(--patina)] transition-all duration-300 shadow-lg ring-4 ring-[var(--patina)]/10">
-                        <img src={url} alt={standNames[i]} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" />
-                      </div>
-                      <span className="absolute bottom-0 right-0 w-4 h-4 rounded-full bg-green-400 border-2 border-background animate-pulse" />
-                    </div>
-                    <p className="text-xs font-medium text-muted-foreground group-hover:text-[var(--patina)] transition-colors">{standNames[i]}</p>
-                  </motion.div>
-                ))}
-              </div>
-              {/* Bottom row: 2 avatars */}
-              <div className="flex gap-8 justify-center">
-                {STAND_AVATARS.slice(2, 4).map((url, i) => (
-                  <motion.div
-                    key={i + 2}
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.4, delay: 0.5 + i * 0.12 }}
-                    className="flex flex-col items-center gap-2 cursor-pointer group"
-                    onClick={() => window.location.href = "/stand"}
-                  >
-                    <div className="relative">
-                      <div className="w-24 h-24 rounded-full overflow-hidden border-2 border-[var(--patina)]/40 group-hover:border-[var(--patina)] transition-all duration-300 shadow-lg ring-4 ring-[var(--patina)]/10">
-                        <img src={url} alt={standNames[i + 2]} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" />
-                      </div>
-                      <span className="absolute bottom-0 right-0 w-4 h-4 rounded-full bg-green-400 border-2 border-background animate-pulse" />
-                    </div>
-                    <p className="text-xs font-medium text-muted-foreground group-hover:text-[var(--patina)] transition-colors">{standNames[i + 2]}</p>
-                  </motion.div>
-                ))}
-              </div>
-              {/* Decorative glow */}
-              <div className="absolute -inset-8 bg-[var(--patina)]/5 rounded-full blur-3xl -z-10" />
             </motion.div>
           </div>
         </div>
@@ -264,50 +198,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ── Stand Preview ─────────────────────────────────────── */}
-      <section className="py-16">
-        <div className="container">
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h2 className="font-display text-2xl font-bold">
-                {lang === "en" ? "Active Stands" : lang === "ja" ? "活動中の替身" : "活跃替身"}
-              </h2>
-              <p className="text-muted-foreground text-sm mt-1">
-                {lang === "en" ? "AI agents monitoring the semiconductor industry right now" : lang === "ja" ? "今まさに半導体業界を監視中のAIエージェント" : "正在监控半导体行业的 AI Agent"}
-              </p>
-            </div>
-            <Button asChild variant="ghost" size="sm" className="gap-1 text-[var(--patina)]">
-              <Link href="/stand">
-                {lang === "en" ? "View All" : lang === "ja" ? "全て見る" : "查看全部"}
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
-            </Button>
-          </div>
 
-          {/* Circular avatar row */}
-          <div className="flex flex-wrap gap-8 justify-center md:justify-start">
-            {STAND_AVATARS.map((url, i) => (
-              <Link key={i} href="/stand">
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: i * 0.08 }}
-                  className="flex flex-col items-center gap-2 cursor-pointer group"
-                >
-                  <div className="relative">
-                    <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-[var(--patina)]/30 group-hover:border-[var(--patina)] transition-all duration-300 shadow-md ring-2 ring-[var(--patina)]/10">
-                      <img src={url} alt={standNames[i]} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" />
-                    </div>
-                    <span className="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full bg-green-400 border-2 border-background animate-pulse" />
-                  </div>
-                  <p className="text-xs text-muted-foreground group-hover:text-[var(--patina)] transition-colors font-medium">{standNames[i]}</p>
-                </motion.div>
-              </Link>
-            ))}
-          </div>
-        </div>
-      </section>
 
       {/* ── Master Preview ────────────────────────────────────── */}
       {masters.length > 0 && (
