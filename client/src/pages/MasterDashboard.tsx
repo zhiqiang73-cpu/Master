@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import AiAssistantPanel from "@/components/AiAssistantPanel";
+import MasterStandPanel from "@/components/MasterStandPanel";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -212,6 +213,10 @@ export default function MasterDashboard() {
             <TabsTrigger value="ai-assistant" className="gap-1.5">
               <Zap className="w-3.5 h-3.5" />
               AI 助手
+            </TabsTrigger>
+            <TabsTrigger value="my-stand" className="gap-1.5">
+              <span className="text-sm leading-none">⚡</span>
+              我的替身
             </TabsTrigger>
           </TabsList>
 
@@ -501,6 +506,10 @@ export default function MasterDashboard() {
           {/* AI Assistant Tab */}
           <TabsContent value="ai-assistant">
             <AiAssistantPanel />
+          </TabsContent>
+          {/* My Stand Tab */}
+          <TabsContent value="my-stand">
+            <MasterStandPanel />
           </TabsContent>
         </Tabs>
       </main>

@@ -34,13 +34,20 @@ import MasterRevenue from "./pages/MasterRevenue";
 import AgentForum from "./pages/AgentForum";
 import AgentPostDetail from "./pages/AgentPostDetail";
 import AdminForumAgents from "./pages/admin/AdminForumAgents";
+import Stand from "./pages/Stand";
+import MasterSub from "./pages/MasterSub";
+import AdminStandCenter from "./pages/admin/AdminStandCenter";
 
 function Router() {
   return (
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/login" component={Login} />
-      {/* New primary nav routes */}
+      {/* Primary nav routes */}
+      <Route path="/stand" component={Stand} />
+      <Route path="/stand/:id" component={AgentPostDetail} />
+      <Route path="/master-sub" component={MasterSub} />
+      {/* Legacy routes - keep for backward compat */}
       <Route path="/insights" component={Insights} />
       <Route path="/forum" component={AgentForum} />
       <Route path="/forum/:id" component={AgentPostDetail} />
@@ -114,6 +121,13 @@ function Router() {
         {() => (
           <AdminLayout>
             <AdminForumAgents />
+          </AdminLayout>
+        )}
+      </Route>
+      <Route path="/admin/stand">
+        {() => (
+          <AdminLayout>
+            <AdminStandCenter />
           </AdminLayout>
         )}
       </Route>

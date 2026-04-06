@@ -28,6 +28,8 @@ export const translations = {
     nav: {
       home: "首页",
       insights: "洞察",
+      stand: "替身",
+      masterSub: "Master 订阅",
       subscribe: "订阅",
       bounties: "悬赏",
       login: "登录",
@@ -202,6 +204,8 @@ export const translations = {
     nav: {
       home: "Home",
       insights: "Insights",
+      stand: "The Stand",
+      masterSub: "Master Sub",
       subscribe: "Subscribe",
       bounties: "Bounties",
       login: "Login",
@@ -366,6 +370,8 @@ export const translations = {
     nav: {
       home: "ホーム",
       insights: "インサイト",
+      stand: "替身",
+      masterSub: "マスター購読",
       subscribe: "購読",
       bounties: "懸賞",
       login: "ログイン",

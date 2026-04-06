@@ -1437,6 +1437,73 @@ export const appRouter = router({
           .where(eq(agentPosts.id, input.postId));
         return { success: true };
       }),
+    // Master: create their own stand
+    createMasterStand: masterProcedure
+      .input(z.object({
+        name: z.string().min(2).max(100),
+        alias: z.string().min(2).max(50).regex(/^[a-z0-9-]+$/),
+        personality: z.string().optional(),
+        specialty: z.string().optional(),
+        expertise: z.array(z.string()).optional(),
+        modelProvider: z.enum(["builtin", "qwen", "glm", "minimax", "openai", "anthropic", "custom"]).optional(),
+        apiKey: z.string().optional(),
+        systemPrompt: z.string().optional(),
+        avatarEmoji: z.string().optional(),
+        avatarColor: z.string().optional(),
+        generateJojoAvatar: z.boolean().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        const master = await getMasterByUserId(ctx.user.id);
+        if (!master) throw new TRPCError({ code: "FORBIDDEN", message: "需要 Master 档案" });
+        // Check alias uniqueness
+        const existing = await db.select().from(agentRoles).where(eq(agentRoles.alias, input.alias)).limit(1);
+        if (existing.length > 0) throw new TRPCError({ code: "CONFLICT", message: "别名已被使用" });
+        // Generate JOJO avatar if requested
+        let avatarUrl: string | null = null;
+        if (input.generateJojoAvatar) {
+          try {
+            const { generateImage } = await import("./_core/imageGeneration.js");
+            const specialty = input.specialty ?? input.expertise?.join(", ") ?? "semiconductor";
+            const result = await generateImage({
+              prompt: `JoJo's Bizarre Adventure art style stand character avatar, ${specialty} expert, dramatic pose, bold outlines, vibrant colors, detailed shading, manga style, professional, no text, square format`,
+            });
+            avatarUrl = result.url ?? null;
+          } catch (e) {
+            console.error("Avatar generation failed:", e);
+          }
+        }
+        await db.insert(agentRoles).values({
+          name: input.name,
+          alias: input.alias,
+          personality: input.personality ?? null,
+          specialty: input.specialty ?? null,
+          expertise: input.expertise ?? [],
+          modelProvider_role: input.modelProvider ?? "builtin",
+          apiKey: input.apiKey ?? null,
+          systemPrompt: input.systemPrompt ?? null,
+          avatarEmoji: input.avatarEmoji ?? "🤖",
+          avatarColor: input.avatarColor ?? "#4a9d8f",
+          avatarUrl,
+          ownerType: "master",
+          ownerId: master.id,
+          scope: "stand_only",
+          postTypes: ["flash", "news", "analysis"],
+          createdBy: ctx.user.id,
+        } as any);
+        return { success: true, avatarUrl };
+      }),
+    // Master: list their own stands
+    listMyStands: masterProcedure.query(async ({ ctx }) => {
+      const db = await getDb();
+      if (!db) return [];
+      const master = await getMasterByUserId(ctx.user.id);
+      if (!master) return [];
+      return db.select().from(agentRoles)
+        .where(eq((agentRoles as any).ownerId, master.id))
+        .orderBy(agentRoles.createdAt);
+    }),
     // Admin: list task logs
     taskLogs: adminProcedure
       .input(z.object({ agentRoleId: z.number().optional(), limit: z.number().default(50) }).optional())

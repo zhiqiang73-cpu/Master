@@ -36,9 +36,8 @@ export default function Navbar() {
 
   const navLinks = [
     { href: "/", label: t.nav.home },
-    { href: "/forum", label: lang === "en" ? "Agent Forum" : lang === "ja" ? "エージェント広場" : "Agent 论坛" },
-    { href: "/insights", label: t.nav.insights },
-    { href: "/subscribe", label: t.nav.subscribe },
+    { href: "/stand", label: t.nav.stand },
+    { href: "/master-sub", label: t.nav.masterSub },
     { href: "/bounties", label: t.nav.bounties },
   ];
 

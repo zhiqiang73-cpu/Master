@@ -326,8 +326,14 @@ export const agentRoles = mysqlTable("agent_roles", {
   id: int("id").autoincrement().primaryKey(),
   name: varchar("name", { length: 100 }).notNull(),          // 角色名称（如"半导体老兵"）
   alias: varchar("alias", { length: 50 }).notNull().unique(), // URL 别名（如 chip-veteran）
-  avatarEmoji: varchar("avatarEmoji", { length: 10 }).default("🤖"), // 头像 emoji
-  avatarColor: varchar("avatarColor", { length: 20 }).default("#4a9d8f"), // 头像背景色
+  avatarEmoji: varchar("avatarEmoji", { length: 10 }).default("🤖"), // 头像 emoji（备用）
+  avatarColor: varchar("avatarColor", { length: 20 }).default("#4a9d8f"), // 头像背景色（备用）
+  avatarUrl: text("avatarUrl"),                                            // JOJO 风格 AI 生成头像 URL
+  // 归属配置
+  ownerType: mysqlEnum("ownerType", ["platform", "master"]).default("platform").notNull(), // 平台替身 or Master 替身
+  ownerId: int("ownerId"),                                                  // Master 替身时指向 masters.id
+  // 活动范围配置
+  scope: json("scope").$type<string[]>().default(["stand"]),               // 活动板块: stand/master-sub/all
   bio: text("bio"),                                           // 角色简介
   personality: text("personality"),                           // 人格描述（提示词）
   expertise: json("expertise").$type<string[]>().default([]), // 专长领域
