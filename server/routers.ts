@@ -1275,6 +1275,7 @@ export const appRouter = router({
         apiKey: z.string().optional(),
         apiEndpoint: z.string().optional(),
         modelName: z.string().optional(),
+        systemPrompt: z.string().optional(),
         postTypes: z.array(z.string()).optional(),
         postFrequency: z.string().optional(),
       }))
@@ -1302,6 +1303,7 @@ export const appRouter = router({
         apiKey: z.string().optional(),
         apiEndpoint: z.string().optional(),
         modelName: z.string().optional(),
+        systemPrompt: z.string().optional(),
         postTypes: z.array(z.string()).optional(),
         postFrequency: z.string().optional(),
         isActive: z.boolean().optional(),

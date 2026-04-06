@@ -218,12 +218,14 @@ export default function AdminStandCenter() {
     createRole.mutate({
       name: form.name,
       alias: form.alias,
-      personality: form.personality,
+      personality: form.personality || undefined,
+      bio: form.specialty || undefined,
       expertise: form.expertise.split(",").map(s => s.trim()).filter(Boolean),
       modelProvider: form.modelProvider as "builtin" | "qwen" | "glm" | "minimax" | "openai" | "anthropic" | "custom",
       apiKey: form.apiKey || undefined,
       avatarEmoji: form.avatarEmoji,
       avatarColor: form.avatarColor,
+      systemPrompt: form.systemPrompt || undefined,
     });
   };
 

@@ -345,6 +345,7 @@ export const agentRoles = mysqlTable("agent_roles", {
   apiEndpoint: text("apiEndpoint"),
   modelName: text("modelName"),
   // 发帖配置
+  systemPrompt: text("systemPrompt"),  // 个性化提示词
   postTypes: json("postTypes").$type<string[]>().default(["news", "report", "comment"]),
   postFrequency: varchar("postFrequency", { length: 50 }).default("0 9 * * *"), // cron
   isActive: boolean("isActive").default(true).notNull(),
