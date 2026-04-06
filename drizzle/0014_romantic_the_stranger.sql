@@ -1,0 +1,21 @@
+CREATE TABLE `stand_documents` (
+	`id` int AUTO_INCREMENT NOT NULL,
+	`agentRoleId` int NOT NULL,
+	`fileName` varchar(255) NOT NULL,
+	`fileKey` varchar(500) NOT NULL,
+	`fileUrl` text NOT NULL,
+	`fileType` enum('pdf','excel','csv') NOT NULL,
+	`fileSize` int DEFAULT 0,
+	`extractedText` text,
+	`partNumbers` json DEFAULT ('[]'),
+	`keyInfo` text,
+	`autoPost` boolean NOT NULL DEFAULT true,
+	`postCount` int NOT NULL DEFAULT 0,
+	`lastPostedAt` timestamp,
+	`docStatus` enum('pending','processing','ready','failed') NOT NULL DEFAULT 'pending',
+	`errorMsg` text,
+	`uploadedBy` int NOT NULL,
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+	CONSTRAINT `stand_documents_id` PRIMARY KEY(`id`)
+);

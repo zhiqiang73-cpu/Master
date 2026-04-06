@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { motion } from "framer-motion";
 import {
   Plus, Zap, Play, Trash2, Clock, Tag, Brain, Edit2,
-  ToggleLeft, ToggleRight, Ban, ShieldCheck, User, Sparkles
+  ToggleLeft, ToggleRight, Ban, ShieldCheck, User, Sparkles,
+  FileText, Upload, CheckCircle2, AlertCircle, Loader2, FileSpreadsheet, Send
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -232,6 +233,214 @@ function StandCard({ role, onTrigger, onDelete, onEdit, onToggleActive, onBan }:
   );
 }
 
+// ─── Document Ad Tab ─────────────────────────────────────────────────────────
+function DocumentAdTab({ roles }: { roles: any[] }) {
+  const [selectedRoleId, setSelectedRoleId] = useState<number | null>(null);
+  const [autoPost, setAutoPost] = useState(true);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const utils = trpc.useUtils();
+
+  const { data: docs, isLoading: docsLoading } = trpc.forum.listStandDocuments.useQuery(
+    { agentRoleId: selectedRoleId! },
+    { enabled: selectedRoleId !== null }
+  );
+
+  const uploadDoc = trpc.forum.uploadStandDocument.useMutation({
+    onSuccess: (data) => {
+      toast.success(data.message ?? "文档上传成功");
+      utils.forum.listStandDocuments.invalidate({ agentRoleId: selectedRoleId! });
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const deleteDoc = trpc.forum.deleteStandDocument.useMutation({
+    onSuccess: () => {
+      toast.success("文档已删除");
+      utils.forum.listStandDocuments.invalidate({ agentRoleId: selectedRoleId! });
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const triggerDocPost = trpc.forum.triggerDocumentPost.useMutation({
+    onSuccess: (data) => toast.success(data.message ?? "已触发推广帖"),
+    onError: (e) => toast.error(e.message),
+  });
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedRoleId) return;
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    if (file.size > maxSize) { toast.error("文件大小不能超过 10MB"); return; }
+    const allowed = ["application/pdf", "application/vnd.ms-excel",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "text/csv"];
+    if (!allowed.includes(file.type) && !file.name.match(/\.(pdf|xlsx|xls|csv)$/i)) {
+      toast.error("仅支持 PDF、Excel、CSV 文件"); return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target?.result as string;
+      const base64Data = dataUrl.split(",")[1];
+      uploadDoc.mutate({
+        agentRoleId: selectedRoleId,
+        fileName: file.name,
+        base64Data,
+        mimeType: file.type || "application/octet-stream",
+        autoPost,
+      });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const docList: any[] = docs ?? [];
+
+  const statusIcon = (status: string) => {
+    if (status === "ready") return <CheckCircle2 className="w-4 h-4 text-green-500" />;
+    if (status === "failed") return <AlertCircle className="w-4 h-4 text-red-500" />;
+    if (status === "processing") return <Loader2 className="w-4 h-4 animate-spin text-blue-500" />;
+    return <Loader2 className="w-4 h-4 animate-spin text-slate-400" />;
+  };
+
+  return (
+    <div className="space-y-6 max-w-3xl">
+      <div className="rounded-lg border border-border bg-card p-5">
+        <h2 className="font-semibold mb-1 flex items-center gap-2">
+          <FileText className="w-4 h-4 text-[var(--patina)]" />
+          文档驱动广告
+        </h2>
+        <p className="text-sm text-muted-foreground mb-4">
+          上传 PDF 或 Excel 文件，替身将自动提取料号和产品信息，并生成推广帖发布到替身广场。
+        </p>
+
+        {/* Select stand */}
+        <div className="grid sm:grid-cols-2 gap-4 mb-4">
+          <div>
+            <Label>选择替身</Label>
+            <Select
+              value={selectedRoleId?.toString() ?? ""}
+              onValueChange={v => setSelectedRoleId(Number(v))}
+            >
+              <SelectTrigger className="mt-1"><SelectValue placeholder="选择替身..." /></SelectTrigger>
+              <SelectContent>
+                {roles.map((r: any) => (
+                  <SelectItem key={r.id} value={r.id.toString()}>
+                    {r.name} ({r.ownerType === "master" ? "Master" : r.creatorType === "user" ? "会员" : "平台"})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-end gap-3">
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input type="checkbox" checked={autoPost} onChange={e => setAutoPost(e.target.checked)}
+                className="w-4 h-4 rounded" />
+              <span>解析完成后自动发帖</span>
+            </label>
+          </div>
+        </div>
+
+        {/* Upload area */}
+        <div
+          className="border-2 border-dashed border-border rounded-lg p-8 text-center cursor-pointer hover:border-[var(--patina)]/50 transition-colors"
+          onClick={() => selectedRoleId && fileInputRef.current?.click()}
+          style={{ opacity: selectedRoleId ? 1 : 0.5 }}
+        >
+          {uploadDoc.isPending ? (
+            <div className="flex flex-col items-center gap-2">
+              <Loader2 className="w-8 h-8 animate-spin text-[var(--patina)]" />
+              <p className="text-sm text-muted-foreground">正在上传并解析...</p>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-2">
+              <Upload className="w-8 h-8 text-muted-foreground" />
+              <p className="text-sm font-medium">点击上传 PDF 或 Excel</p>
+              <p className="text-xs text-muted-foreground">支持 .pdf .xlsx .xls .csv，最大 10MB</p>
+              {!selectedRoleId && <p className="text-xs text-amber-500">请先选择替身</p>}
+            </div>
+          )}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,.xlsx,.xls,.csv"
+            className="hidden"
+            onChange={handleFileSelect}
+          />
+        </div>
+      </div>
+
+      {/* Document list */}
+      {selectedRoleId && (
+        <div className="rounded-lg border border-border bg-card overflow-hidden">
+          <div className="px-5 py-3 border-b border-border bg-muted/30">
+            <h3 className="text-sm font-semibold">已上传文档</h3>
+          </div>
+          {docsLoading ? (
+            <div className="p-8 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto text-muted-foreground" /></div>
+          ) : docList.length === 0 ? (
+            <div className="p-8 text-center text-sm text-muted-foreground">还没有上传任何文档</div>
+          ) : (
+            <div className="divide-y divide-border">
+              {docList.map((doc: any) => (
+                <div key={doc.id} className="p-4 flex items-start gap-3">
+                  <div className="flex-shrink-0 mt-0.5">
+                    {doc.fileType === "pdf"
+                      ? <FileText className="w-5 h-5 text-red-400" />
+                      : <FileSpreadsheet className="w-5 h-5 text-green-500" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-sm font-medium truncate">{doc.fileName}</span>
+                      {statusIcon(doc.status)}
+                      <Badge variant="outline" className="text-[9px] px-1 py-0 ml-auto flex-shrink-0">
+                        {doc.status === "ready" ? "就绪" : doc.status === "processing" ? "解析中" : doc.status === "failed" ? "失败" : "等待"}
+                      </Badge>
+                    </div>
+                    {doc.keyInfo && (
+                      <p className="text-xs text-muted-foreground line-clamp-2 mb-1">{doc.keyInfo}</p>
+                    )}
+                    {Array.isArray(doc.partNumbers) && doc.partNumbers.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mb-1">
+                        {(doc.partNumbers as string[]).slice(0, 6).map((pn: string) => (
+                          <Badge key={pn} variant="outline" className="text-[9px] px-1.5 py-0 font-mono border-amber-200 text-amber-700">{pn}</Badge>
+                        ))}
+                        {doc.partNumbers.length > 6 && (
+                          <span className="text-[10px] text-muted-foreground">+{doc.partNumbers.length - 6} 更多</span>
+                        )}
+                      </div>
+                    )}
+                    <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+                      <span>已发帖 {doc.postCount} 条</span>
+                      {doc.lastPostedAt && <span>最后发帖 {new Date(doc.lastPostedAt).toLocaleDateString()}</span>}
+                      <span>{(doc.fileSize / 1024).toFixed(1)} KB</span>
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-1.5 flex-shrink-0">
+                    <Button
+                      size="sm" variant="outline"
+                      className="h-7 text-xs gap-1 text-[var(--patina)] border-[var(--patina)]/30 hover:bg-[var(--patina)]/5"
+                      disabled={doc.status !== "ready" || triggerDocPost.isPending}
+                      onClick={() => triggerDocPost.mutate({ docId: doc.id })}
+                    >
+                      <Send className="w-3 h-3" />发帖
+                    </Button>
+                    <Button
+                      size="sm" variant="ghost"
+                      className="h-7 text-xs px-2 text-red-500 hover:bg-red-50"
+                      onClick={() => { if (confirm("确认删除此文档？")) deleteDoc.mutate({ id: doc.id }); }}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AdminStandCenter() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -370,6 +579,7 @@ export default function AdminStandCenter() {
         <TabsList className="mb-6">
           <TabsTrigger value="stands">替身列表 ({roles.length})</TabsTrigger>
           <TabsTrigger value="trigger">手动触发</TabsTrigger>
+          <TabsTrigger value="docs">文档广告</TabsTrigger>
           <TabsTrigger value="logs">任务日志</TabsTrigger>
         </TabsList>
 
@@ -444,6 +654,11 @@ export default function AdminStandCenter() {
               {triggerPost.isPending ? "发帖中..." : "触发发帖"}
             </Button>
           </div>
+        </TabsContent>
+
+        {/* ── 文档广告 Tab ── */}
+        <TabsContent value="docs">
+          <DocumentAdTab roles={roles} />
         </TabsContent>
 
         <TabsContent value="logs">

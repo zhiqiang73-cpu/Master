@@ -25,6 +25,7 @@ import {
   cancelSubscription,
   generateArticleCode,
   getAdminStats,
+  getEnhancedAdminStats,
   getAgentTask,
   getArticleByCode,
   getArticleById,
@@ -59,8 +60,13 @@ import {
 } from "./db";
 import { z } from "zod";
 import { nanoid } from "nanoid";
-import { masters, users, smartContracts, contentModerationLogs, aiMasterConfigs, agentRoles, agentPosts, agentComments, agentTaskLogs, standSubscriptions, masterSubscriptions } from "../drizzle/schema";
+import { masters, users, smartContracts, contentModerationLogs, aiMasterConfigs, agentRoles, agentPosts, agentComments, agentTaskLogs, standSubscriptions, masterSubscriptions, standDocuments } from "../drizzle/schema";
 import { storagePut } from "./storage";
+import {
+  getOrCreateWallet, getWallet, rechargeWallet, deductWallet,
+  getWalletTransactions, createCoupon, applyCoupon, listCoupons,
+  deactivateCoupon, listWallets,
+} from "./walletDb";
 import { eq, and } from "drizzle-orm";
 
 // ─── Admin Guard ──────────────────────────────────────────────────────────────
@@ -739,6 +745,7 @@ export const appRouter = router({
   // ─── Admin ────────────────────────────────────────────────────────────────
   admin: router({
     stats: adminProcedure.query(() => getAdminStats()),
+    enhancedStats: adminProcedure.query(() => getEnhancedAdminStats()),
 
     revenueChart: adminProcedure.query(() => getRevenueByMonth()),
 
@@ -1444,34 +1451,55 @@ export const appRouter = router({
         await db.delete(agentRoles).where(eq(agentRoles.id, input.id));
         return { success: true };
       }),
-    // List posts (public)
+    // List posts (public) - supports cursor-based infinite scroll
     listPosts: publicProcedure
       .input(z.object({
         postType: z.enum(["news", "report", "flash", "discussion", "analysis", "all"]).optional(),
         agentRoleId: z.number().optional(),
-        page: z.number().default(1),
+        // Cursor-based pagination for infinite scroll
+        cursor: z.number().optional(),  // last post id seen (exclusive)
         limit: z.number().default(20),
+        // Legacy page-based (kept for backward compat)
+        page: z.number().optional(),
       }).optional())
       .query(async ({ input }) => {
         const db = await getDb();
-        if (!db) return { posts: [], total: 0 };
-        const page = input?.page ?? 1;
-        const limit = input?.limit ?? 20;
-        const offset = (page - 1) * limit;
-        let query = db.select({
-          post: agentPosts,
-          role: { id: agentRoles.id, name: agentRoles.name, alias: agentRoles.alias, avatarEmoji: agentRoles.avatarEmoji, avatarColor: agentRoles.avatarColor, avatarUrl: agentRoles.avatarUrl },
-        }).from(agentPosts)
-          .leftJoin(agentRoles, eq(agentPosts.agentRoleId, agentRoles.id))
-          .$dynamic();
+        if (!db) return { posts: [], hasMore: false, nextCursor: null };
+        const limit = Math.min(input?.limit ?? 20, 50);
+        const { lt, and: dbAnd, desc } = await import("drizzle-orm");
+        let conditions: any[] = [eq(agentPosts.status, "published" as any)];
         if (input?.postType && input.postType !== "all") {
-          query = query.where(eq(agentPosts.postType, input.postType as any));
+          conditions.push(eq(agentPosts.postType, input.postType as any));
         }
         if (input?.agentRoleId) {
-          query = query.where(eq(agentPosts.agentRoleId, input.agentRoleId));
+          conditions.push(eq(agentPosts.agentRoleId, input.agentRoleId));
         }
-        const posts = await query.orderBy(agentPosts.createdAt).limit(limit).offset(offset);
-        return { posts, total: posts.length };
+        // Cursor: fetch posts with id < cursor (older than cursor)
+        if (input?.cursor) {
+          conditions.push(lt(agentPosts.id, input.cursor));
+        }
+        const whereClause = conditions.length > 0 ? dbAnd(...conditions) : undefined;
+        const posts = await db.select({
+          post: agentPosts,
+          role: {
+            id: agentRoles.id,
+            name: agentRoles.name,
+            alias: agentRoles.alias,
+            avatarEmoji: agentRoles.avatarEmoji,
+            avatarColor: agentRoles.avatarColor,
+            avatarUrl: agentRoles.avatarUrl,
+            ownerType: agentRoles.ownerType,
+            creatorType: agentRoles.creatorType,
+          },
+        }).from(agentPosts)
+          .leftJoin(agentRoles, eq(agentPosts.agentRoleId, agentRoles.id))
+          .where(whereClause)
+          .orderBy(desc(agentPosts.id))
+          .limit(limit + 1);
+        const hasMore = posts.length > limit;
+        const items = hasMore ? posts.slice(0, limit) : posts;
+        const nextCursor = hasMore ? items[items.length - 1].post.id : null;
+        return { posts: items, hasMore, nextCursor, total: items.length };
       }),
     // Get single post with comments
     getPost: publicProcedure
@@ -1981,6 +2009,84 @@ export const appRouter = router({
         return { success: true };
       }),
 
+    // Admin: upload document for a platform stand (PDF/Excel)
+    uploadStandDocument: adminProcedure
+      .input(z.object({
+        agentRoleId: z.number(),
+        fileName: z.string(),
+        base64Data: z.string(),
+        mimeType: z.string(),
+        autoPost: z.boolean().default(true),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        // Verify stand exists and is a platform stand
+        const [role] = await db.select().from(agentRoles).where(eq(agentRoles.id, input.agentRoleId)).limit(1);
+        if (!role) throw new TRPCError({ code: "NOT_FOUND", message: "替身不存在" });
+        // Determine file type
+        const ext = input.fileName.split(".").pop()?.toLowerCase() ?? "";
+        let fileType: "pdf" | "excel" | "csv" = "pdf";
+        if (ext === "xlsx" || ext === "xls") fileType = "excel";
+        else if (ext === "csv") fileType = "csv";
+        // Upload to S3
+        const buffer = Buffer.from(input.base64Data, "base64");
+        const fileKey = `stand-docs/role-${input.agentRoleId}-${nanoid(8)}.${ext}`;
+        const { url } = await storagePut(fileKey, buffer, input.mimeType);
+        // Insert document record
+        const insertResult = await db.insert(standDocuments).values({
+          agentRoleId: input.agentRoleId,
+          fileName: input.fileName,
+          fileKey,
+          fileUrl: url,
+          fileType,
+          fileSize: buffer.length,
+          autoPost: input.autoPost,
+          uploadedBy: ctx.user.id,
+          status: "pending",
+        } as any);
+        const docId = (insertResult as any).insertId ?? 0;
+        // Parse in background
+        parseStandDocumentAsync(docId, buffer, fileType, input.agentRoleId, input.autoPost).catch(console.error);
+        return { success: true, docId, url, message: "文档上传成功，正在解析中..." };
+      }),
+
+    // Admin: list documents for a stand
+    listStandDocuments: adminProcedure
+      .input(z.object({ agentRoleId: z.number() }))
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) return [];
+        return db.select().from(standDocuments)
+          .where(eq(standDocuments.agentRoleId, input.agentRoleId))
+          .orderBy(standDocuments.createdAt);
+      }),
+
+    // Admin: delete a stand document
+    deleteStandDocument: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        await db.delete(standDocuments).where(eq(standDocuments.id, input.id));
+        return { success: true };
+      }),
+
+    // Admin: manually trigger a promotional post from a document
+    triggerDocumentPost: adminProcedure
+      .input(z.object({ docId: z.number() }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        const [doc] = await db.select().from(standDocuments).where(eq(standDocuments.id, input.docId)).limit(1);
+        if (!doc) throw new TRPCError({ code: "NOT_FOUND" });
+        if (doc.status !== "ready") throw new TRPCError({ code: "BAD_REQUEST", message: "文档尚未解析完成" });
+        const [role] = await db.select().from(agentRoles).where(eq(agentRoles.id, doc.agentRoleId)).limit(1);
+        if (!role) throw new TRPCError({ code: "NOT_FOUND" });
+        generateDocumentPromoPost(doc as any, role as any).catch(console.error);
+        return { success: true, message: "推广帖生成任务已启动" };
+      }),
+
     // Admin: get subscription count per stand
     standSubscriptionStats: adminProcedure.query(async () => {
       const db = await getDb();
@@ -1992,6 +2098,91 @@ export const appRouter = router({
       }
       return Object.entries(stats).map(([id, count]) => ({ agentRoleId: Number(id), count }));
     }),
+  }),
+
+  // ─── Wallet ────────────────────────────────────────────────────────────────
+  wallet: router({
+    /** 获取当前用户钱包 */
+    myWallet: protectedProcedure.query(async ({ ctx }) => {
+      return getOrCreateWallet(ctx.user.id);
+    }),
+
+    /** 获取交易记录 */
+    myTransactions: protectedProcedure
+      .input(z.object({ limit: z.number().default(20), offset: z.number().default(0) }))
+      .query(async ({ ctx, input }) => {
+        return getWalletTransactions(ctx.user.id, input.limit, input.offset);
+      }),
+
+    /** 验证优惠券（不消耗） */
+    validateCoupon: protectedProcedure
+      .input(z.object({ code: z.string(), spendAmount: z.number() }))
+      .query(async ({ ctx, input }) => {
+        return applyCoupon(input.code, ctx.user.id, input.spendAmount);
+      }),
+
+    // ── Admin wallet operations ──
+    /** 管理员查看所有钱包 */
+    adminListWallets: adminProcedure
+      .input(z.object({ limit: z.number().default(50), offset: z.number().default(0) }))
+      .query(async ({ input }) => {
+        return listWallets(input.limit, input.offset);
+      }),
+
+    /** 管理员赠送余额 */
+    adminGrant: adminProcedure
+      .input(z.object({
+        userId: z.number(),
+        amount: z.number().min(1),
+        description: z.string().default("管理员赠送"),
+      }))
+      .mutation(async ({ input }) => {
+        return rechargeWallet(input.userId, input.amount, input.description, "admin_grant");
+      }),
+
+    /** 管理员扣款 */
+    adminDeduct: adminProcedure
+      .input(z.object({
+        userId: z.number(),
+        amount: z.number().min(1),
+        description: z.string().default("管理员扣款"),
+      }))
+      .mutation(async ({ input }) => {
+        return deductWallet(input.userId, input.amount, input.description, undefined, "admin_deduct");
+      }),
+
+    /** 管理员创建优惠券 */
+    adminCreateCoupon: adminProcedure
+      .input(z.object({
+        code: z.string().min(4).max(32),
+        type: z.enum(["fixed", "percent"]),
+        value: z.number().min(1),
+        minSpend: z.number().default(0),
+        maxDiscount: z.number().optional(),
+        totalCount: z.number().optional(),
+        perUserLimit: z.number().default(1),
+        targetUserId: z.number().optional(),
+        description: z.string().optional(),
+        expiresAt: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        return createCoupon({
+          ...input,
+          expiresAt: input.expiresAt ? new Date(input.expiresAt) : undefined,
+          createdBy: ctx.user.id,
+        });
+      }),
+
+    /** 管理员列出优惠券 */
+    adminListCoupons: adminProcedure.query(() => listCoupons()),
+
+    /** 管理员停用优惠券 */
+    adminDeactivateCoupon: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await deactivateCoupon(input.id);
+        return { success: true };
+      }),
   }),
 });
 // ─── Forum Agent Runner ───────────────────────────────────────────────────────
@@ -2608,6 +2799,189 @@ ${postsText}
       console.error(`[RSS] Failed to send digest to ${sub.email}:`, err);
     }
   }
+}
+
+// ─── Stand Document Parser ───────────────────────────────────────────────────
+/**
+ * Parse an uploaded PDF/Excel document, extract part numbers and key info,
+ * then optionally generate a promotional post.
+ */
+async function parseStandDocumentAsync(
+  docId: number,
+  buffer: Buffer,
+  fileType: "pdf" | "excel" | "csv",
+  agentRoleId: number,
+  autoPost: boolean
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+
+  try {
+    await db.update(standDocuments).set({ status: "processing" } as any).where(eq(standDocuments.id, docId));
+
+    let extractedText = "";
+    let partNumbers: string[] = [];
+
+    if (fileType === "pdf") {
+      // Parse PDF
+      const pdfParseModule = await import("pdf-parse");
+      const pdfParse = (pdfParseModule as any).default ?? pdfParseModule;
+      const pdfData = await pdfParse(buffer);
+      extractedText = pdfData.text.slice(0, 8000); // Limit to avoid token overflow
+    } else if (fileType === "excel" || fileType === "csv") {
+      // Parse Excel/CSV
+      const XLSX = await import("xlsx");
+      const workbook = XLSX.read(buffer, { type: "buffer" });
+      const texts: string[] = [];
+      for (const sheetName of workbook.SheetNames.slice(0, 3)) {
+        const sheet = workbook.Sheets[sheetName];
+        const csv = XLSX.utils.sheet_to_csv(sheet);
+        texts.push(csv.slice(0, 3000));
+      }
+      extractedText = texts.join("\n\n").slice(0, 8000);
+    }
+
+    // Use LLM to extract part numbers and key info
+    const extractResp = await invokeLLM({
+      messages: [
+        {
+          role: "system",
+          content: `你是半导体行业文档分析专家。请从以下文档内容中提取关键信息。`,
+        },
+        {
+          role: "user",
+          content: `请分析以下文档内容，提取：
+1. 所有料号/型号（Part Numbers，如 STM32F103、NAND128W3A2DN6E 等）
+2. 产品关键信息摘要（规格、特性、应用场景等，200字以内）
+
+文档内容：
+${extractedText}
+
+请以JSON格式返回：{"partNumbers": ["料号1", "料号2", ...], "keyInfo": "关键信息摘要"}`,
+        },
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "doc_extract",
+          strict: true,
+          schema: {
+            type: "object",
+            properties: {
+              partNumbers: { type: "array", items: { type: "string" } },
+              keyInfo: { type: "string" },
+            },
+            required: ["partNumbers", "keyInfo"],
+            additionalProperties: false,
+          },
+        },
+      },
+    });
+
+    const raw = extractResp?.choices?.[0]?.message?.content;
+    const extracted = typeof raw === "string" ? JSON.parse(raw) : raw;
+    partNumbers = extracted?.partNumbers ?? [];
+    const keyInfo = extracted?.keyInfo ?? "";
+
+    await db.update(standDocuments).set({
+      extractedText: extractedText.slice(0, 5000),
+      partNumbers,
+      keyInfo,
+      status: "ready",
+    } as any).where(eq(standDocuments.id, docId));
+
+    console.log(`[DocParser] Doc ${docId} parsed: ${partNumbers.length} part numbers found.`);
+
+    // Auto-generate promotional post if configured
+    if (autoPost && partNumbers.length > 0) {
+      const [role] = await db.select().from(agentRoles).where(eq(agentRoles.id, agentRoleId)).limit(1);
+      if (role) {
+        const [doc] = await db.select().from(standDocuments).where(eq(standDocuments.id, docId)).limit(1);
+        if (doc) await generateDocumentPromoPost(doc as any, role as any);
+      }
+    }
+  } catch (err: any) {
+    console.error(`[DocParser] Failed to parse doc ${docId}:`, err?.message);
+    await db.update(standDocuments).set({
+      status: "failed",
+      errorMsg: err?.message ?? "Unknown error",
+    } as any).where(eq(standDocuments.id, docId));
+  }
+}
+
+/**
+ * Generate a promotional post for a stand based on document content.
+ */
+async function generateDocumentPromoPost(
+  doc: { id: number; agentRoleId: number; fileName: string; partNumbers: string[] | null; keyInfo: string | null; postCount: number },
+  role: { id: number; name: string; personality: string | null; expertise: unknown; personalityTags: string[] | null; interestTags: string[] | null; adCopy: string | null; ownerType: string }
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+
+  const partNums = (doc.partNumbers ?? []).slice(0, 5);
+  const keyInfo = doc.keyInfo ?? "";
+  const expertise = Array.isArray(role.expertise) ? (role.expertise as string[]).join("、") : "半导体";
+  const personality = role.personality ?? `你是 ${role.name}，半导体行业专家。`;
+
+  const prompt = `你是 ${role.name}，${expertise} 领域专家。
+
+请根据以下产品资料，撰写一条简短的行业推广帖（150-250字），风格专业自然，不要像广告，要像行业人士在分享有价值的产品信息。
+
+产品料号：${partNums.join("、") || "见文档"}
+产品信息：${keyInfo}
+
+要求：
+- 突出产品的技术亮点和应用场景
+- 提及具体料号（对 SEO 有帮助）
+- 语气专业但不生硬
+- 结尾可以加 1-2 个相关话题标签`;
+
+  const resp = await invokeLLM({
+    messages: [
+      { role: "system", content: personality },
+      { role: "user", content: prompt },
+    ],
+  });
+
+  let content = (resp?.choices?.[0]?.message?.content as string) ?? "";
+  if (!content) return;
+
+  // Append ad copy if configured
+  if (role.adCopy && role.ownerType !== "master" && role.ownerType !== "user") {
+    content = content + "\n\n---\n" + role.adCopy;
+  }
+
+  // Extract hashtags from content
+  const hashtagMatches = content.match(/#[\u4e00-\u9fa5\w]+/g) ?? [];
+  const tagSet = new Set([...hashtagMatches.map(t => t.slice(1)), ...partNums.slice(0, 3)]);
+  const tags = Array.from(tagSet);
+
+  await db.insert(agentPosts).values({
+    agentRoleId: role.id,
+    postType: "flash" as any,
+    content,
+    summary: content.slice(0, 80),
+    tags,
+    status: "published" as any,
+  } as any);
+
+  // Update document post count
+  await db.update(standDocuments).set({
+    postCount: doc.postCount + 1,
+    lastPostedAt: new Date(),
+  } as any).where(eq(standDocuments.id, doc.id));
+
+  // Auto-translate the promo post
+  const allPosts = await db.select().from(agentPosts)
+    .where(eq(agentPosts.agentRoleId, role.id))
+    .orderBy(agentPosts.createdAt as any);
+  const latestPost = allPosts[allPosts.length - 1];
+  if (latestPost) {
+    autoTranslateAgentPost(latestPost.id, content, null).catch(console.error);
+  }
+
+  console.log(`[DocPromo] Generated promo post for doc ${doc.id}, role ${role.name}`);
 }
 
 /**

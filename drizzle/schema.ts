@@ -477,3 +477,101 @@ export const agentTaskLogs = mysqlTable("agent_task_logs", {
   completedAt: timestamp("completedAt"),
 });
 export type AgentTaskLog = typeof agentTaskLogs.$inferSelect;
+
+// ─── 账户余额系统 ──────────────────────────────────────────────────────────────
+
+/** 用户钱包（每个用户一个，Master 和普通会员都有） */
+export const wallets = mysqlTable("wallets", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().unique(),                   // 关联用户
+  balance: int("balance").default(0).notNull(),               // 余额（单位：分，避免浮点误差）
+  frozenBalance: int("frozenBalance").default(0).notNull(),   // 冻结余额（待处理交易）
+  totalCharged: int("totalCharged").default(0).notNull(),     // 累计充值
+  totalSpent: int("totalSpent").default(0).notNull(),         // 累计消费
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type Wallet = typeof wallets.$inferSelect;
+
+/** 钱包交易记录 */
+export const walletTransactions = mysqlTable("wallet_transactions", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  type: mysqlEnum("txType", [
+    "recharge",     // 充值
+    "spend",        // 消费（订阅/悬赏/文章购买）
+    "refund",       // 退款
+    "coupon",       // 优惠券抵扣
+    "admin_grant",  // 管理员赠送
+    "admin_deduct", // 管理员扣款
+  ]).notNull(),
+  amount: int("amount").notNull(),                            // 金额（分），正数=入账，负数=出账
+  balanceBefore: int("balanceBefore").notNull(),              // 交易前余额
+  balanceAfter: int("balanceAfter").notNull(),                // 交易后余额
+  description: varchar("description", { length: 200 }),      // 交易说明
+  relatedId: varchar("relatedId", { length: 100 }),          // 关联业务 ID（订单号等）
+  couponId: int("couponId"),                                  // 使用的优惠券 ID
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type WalletTransaction = typeof walletTransactions.$inferSelect;
+
+/** 优惠券 */
+export const coupons = mysqlTable("coupons", {
+  id: int("id").autoincrement().primaryKey(),
+  code: varchar("code", { length: 32 }).notNull().unique(),   // 优惠券码
+  type: mysqlEnum("couponType", [
+    "fixed",      // 固定金额（单位：分）
+    "percent",    // 百分比折扣
+  ]).notNull(),
+  value: int("value").notNull(),                              // 面值（分）或折扣百分比（0-100）
+  minSpend: int("minSpend").default(0).notNull(),             // 最低消费门槛（分）
+  maxDiscount: int("maxDiscount"),                            // 最大折扣金额（分，percent 类型限制）
+  totalCount: int("totalCount"),                              // 总发行量（null=无限）
+  usedCount: int("usedCount").default(0).notNull(),           // 已使用数量
+  perUserLimit: int("perUserLimit").default(1).notNull(),     // 每人限用次数
+  targetUserId: int("targetUserId"),                          // 指定用户（null=通用）
+  description: varchar("description", { length: 200 }),      // 优惠券说明
+  expiresAt: timestamp("expiresAt"),                          // 过期时间（null=永不过期）
+  isActive: boolean("isActive").default(true).notNull(),      // 是否启用
+  createdBy: int("createdBy").notNull(),                      // 创建者（管理员 userId）
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type Coupon = typeof coupons.$inferSelect;
+
+/** 平台替身文档（PDF/Excel 上传，用于生成推广帖） */
+export const standDocuments = mysqlTable("stand_documents", {
+  id: int("id").autoincrement().primaryKey(),
+  agentRoleId: int("agentRoleId").notNull(),          // 关联的替身 ID
+  fileName: varchar("fileName", { length: 255 }).notNull(), // 原始文件名
+  fileKey: varchar("fileKey", { length: 500 }).notNull(),   // S3 存储 key
+  fileUrl: text("fileUrl").notNull(),                       // S3 访问 URL
+  fileType: mysqlEnum("fileType", ["pdf", "excel", "csv"]).notNull(),
+  fileSize: int("fileSize").default(0),                     // 文件大小（字节）
+  // 解析结果
+  extractedText: text("extractedText"),                     // 提取的文本内容
+  partNumbers: json("partNumbers").$type<string[]>().default([]), // 提取的料号列表
+  keyInfo: text("keyInfo"),                                 // LLM 提取的关键信息摘要
+  // 发帖配置
+  autoPost: boolean("autoPost").default(true).notNull(),    // 是否自动生成推广帖
+  postCount: int("postCount").default(0).notNull(),         // 已生成的推广帖数量
+  lastPostedAt: timestamp("lastPostedAt"),                  // 最后发帖时间
+  // 状态
+  status: mysqlEnum("docStatus", ["pending", "processing", "ready", "failed"]).default("pending").notNull(),
+  errorMsg: text("errorMsg"),
+  uploadedBy: int("uploadedBy").notNull(),                  // 上传者 userId
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type StandDocument = typeof standDocuments.$inferSelect;
+export type InsertStandDocument = typeof standDocuments.$inferInsert;
+
+/** 优惠券使用记录 */
+export const couponUsages = mysqlTable("coupon_usages", {
+  id: int("id").autoincrement().primaryKey(),
+  couponId: int("couponId").notNull(),
+  userId: int("userId").notNull(),
+  transactionId: int("transactionId"),                        // 关联的交易记录
+  discountAmount: int("discountAmount").notNull(),            // 实际折扣金额（分）
+  usedAt: timestamp("usedAt").defaultNow().notNull(),
+});
+export type CouponUsage = typeof couponUsages.$inferSelect;

@@ -7,12 +7,12 @@
 // 像素调色板（多彩，参考 clawcard.sh 风格）
 const PIXEL_PALETTES = [
   // [body, hair, skin, accent]
-  ["#e63946", "#1d3557", "#f4a261", "#457b9d"],  // 红衣蓝发
+  ["#2a9d8f", "#1d3557", "#f4a261", "#457b9d"],  // 青绿衣蓝发
   ["#2a9d8f", "#264653", "#e9c46a", "#f4a261"],  // 青衣深发
   ["#e9c46a", "#264653", "#f4a261", "#e76f51"],  // 黄衣深发
   ["#457b9d", "#1d3557", "#f4a261", "#a8dadc"],  // 蓝衣深发
   ["#e76f51", "#264653", "#e9c46a", "#2a9d8f"],  // 橙衣深发
-  ["#a8dadc", "#1d3557", "#f4a261", "#e63946"],  // 浅蓝衣
+  ["#a8dadc", "#1d3557", "#f4a261", "#2a9d8f"],  // 浅蓝衣
   ["#6a4c93", "#1d3557", "#f4a261", "#c77dff"],  // 紫衣
   ["#52b788", "#081c15", "#f4a261", "#d8f3dc"],  // 绿衣
   ["#f72585", "#3a0ca3", "#f4a261", "#4cc9f0"],  // 粉衣紫发
@@ -289,10 +289,10 @@ export function PixelSquareScene({
       <div
         className="absolute top-3 left-1/2 -translate-x-1/2 whitespace-nowrap"
         style={{
-          fontFamily: "'Courier New', monospace",
+          fontFamily: "'Inter', 'Outfit', sans-serif",
           fontSize: Math.max(10, height / 10),
           fontWeight: 700,
-          color: "#64748b",
+          color: "oklch(52% 0.11 172)",
           textShadow: "none",
           letterSpacing: "0.15em",
           imageRendering: "pixelated",

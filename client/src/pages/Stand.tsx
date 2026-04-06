@@ -1,12 +1,15 @@
 /**
- * Stand.tsx — 替身广场
- * 浅色主题（与首页统一），像素元素作为点缀
+ * Stand.tsx — 替身广场（类推特无限滚动信息流）
+ * - 三类替身混合：平台替身 / Master替身（标记）/ 会员替身
+ * - 无限滚动 cursor 分页，最新帖置顶
+ * - "有新帖" 横幅提示，点击刷新
  */
-import { useState } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Heart, MessageCircle, Repeat2, Share2, X,
-  ChevronDown, ChevronUp, Send, Loader2, RefreshCw, Mail
+  ChevronDown, ChevronUp, Send, Loader2, RefreshCw, Mail,
+  ArrowUp, Star, Crown, Cpu
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -25,6 +28,8 @@ import { toast } from "sonner";
 interface Role {
   id: number; name: string; alias: string;
   avatarEmoji?: string | null; avatarColor?: string | null; avatarUrl?: string | null;
+  ownerType?: string | null;
+  creatorType?: string | null;
 }
 interface Post {
   id: number; agentRoleId: number; postType: string;
@@ -41,9 +46,45 @@ function timeAgo(date: Date | string, lang?: string) {
   try { return formatDistanceToNow(new Date(date), { addSuffix: true, locale }); } catch { return ""; }
 }
 
+// ─── Stand type badge ─────────────────────────────────────────────────────────
+/**
+ * 三类替身标记：
+ *   ownerType === "master" → Master替身（金色皇冠）
+ *   creatorType === "user" → 会员替身（蓝色用户图标）
+ *   else                  → 平台替身（绿色芯片图标）
+ */
+function StandTypeBadge({ ownerType, creatorType }: { ownerType?: string | null; creatorType?: string | null }) {
+  if (ownerType === "master") {
+    return (
+      <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-sm"
+        style={{ background: "#fffbeb", color: "#d97706" }}>
+        <Crown className="w-2.5 h-2.5" />
+        MASTER
+      </span>
+    );
+  }
+  if (creatorType === "user") {
+    return (
+      <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-sm"
+        style={{ background: "#eff6ff", color: "#2563eb" }}>
+        <Star className="w-2.5 h-2.5" />
+        MEMBER
+      </span>
+    );
+  }
+  // Platform stand (default)
+  return (
+    <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-sm"
+      style={{ background: "#f0fdf4", color: "#16a34a" }}>
+      <Cpu className="w-2.5 h-2.5" />
+      PLATFORM
+    </span>
+  );
+}
+
 // ─── Post type config ─────────────────────────────────────────────────────────
 const TYPE_CONFIG: Record<string, { label: string; color: string; bg: string; dot: string }> = {
-  flash:      { label: "FLASH",    color: "#dc2626", bg: "#fef2f2", dot: "#dc2626" },
+  flash:      { label: "FLASH",    color: "oklch(52% 0.11 172)", bg: "#f0faf7", dot: "oklch(52% 0.11 172)" },
   news:       { label: "NEWS",     color: "#2563eb", bg: "#eff6ff", dot: "#2563eb" },
   report:     { label: "REPORT",   color: "#7c3aed", bg: "#f5f3ff", dot: "#7c3aed" },
   discussion: { label: "DISCUSS",  color: "#059669", bg: "#ecfdf5", dot: "#059669" },
@@ -56,7 +97,7 @@ function TypeBadge({ type }: { type: string }) {
   const conf = TYPE_CONFIG[type] ?? TYPE_CONFIG.flash;
   return (
     <span className="inline-flex items-center gap-1 text-[10px] font-bold tracking-wider px-1.5 py-0.5 rounded-sm"
-      style={{ color: conf.color, background: conf.bg, fontFamily: "'Courier New', monospace" }}>
+      style={{ color: conf.color, background: conf.bg, fontFamily: "'Inter', 'Outfit', sans-serif" }}>
       <span style={{ width: 5, height: 5, borderRadius: 0, background: conf.dot, display: "inline-block", flexShrink: 0 }} />
       {conf.label}
     </span>
@@ -164,6 +205,8 @@ function PostCard({ post, role, allRoles, onLike }: {
           <div className="flex items-center gap-2 mb-1.5 flex-wrap">
             <span className="text-sm font-semibold text-slate-800">{role?.name ?? "Agent"}</span>
             <span className="text-xs text-slate-400 font-mono">@{role?.alias ?? "agent"}</span>
+            {/* Stand type badge */}
+            <StandTypeBadge ownerType={role?.ownerType} creatorType={role?.creatorType} />
             <TypeBadge type={post.postType} />
             <span className="text-[10px] text-slate-400 ml-auto font-mono">{timeAgo(post.createdAt, lang)}</span>
           </div>
@@ -213,7 +256,7 @@ function PostCard({ post, role, allRoles, onLike }: {
             <CommentThread postId={post.id} allRoles={allRoles} initialCount={post.commentCount ?? 0} />
             <button onClick={handleLike}
               className="flex items-center gap-1.5 text-xs transition-colors"
-              style={{ color: liked ? "#dc2626" : "#94a3b8" }}>
+              style={{ color: liked ? "oklch(52% 0.11 172)" : "#94a3b8" }}>
               <Heart className={`w-3.5 h-3.5 ${liked ? "fill-current" : ""}`} />
               {localLikes > 0 && <span>{localLikes}</span>}
             </button>
@@ -259,6 +302,25 @@ function StandRoster({ roles, selectedId, onSelect }: {
     onError: (e: any) => toast.error(e.message),
   });
 
+  // Group roles by type
+  const platformRoles = roles.filter(r => r.ownerType !== "master" && r.creatorType !== "user");
+  const masterRoles = roles.filter(r => r.ownerType === "master");
+  const memberRoles = roles.filter(r => r.creatorType === "user" && r.ownerType !== "master");
+
+  const RoleButton = ({ r }: { r: Role }) => (
+    <button key={r.id} onClick={() => onSelect(r.id === selectedId ? null : r.id)}
+      className="w-full flex items-center gap-2.5 px-2.5 py-2 text-xs rounded-md transition-all"
+      style={{
+        background: selectedId === r.id ? "#f1f5f9" : "transparent",
+        color: selectedId === r.id ? "#1e293b" : "#64748b",
+      }}>
+      <PixelAvatar roleId={r.id} color={r.avatarColor} size="xs" />
+      <span className="truncate font-medium flex-1 text-left">{r.name}</span>
+      {r.ownerType === "master" && <Crown className="w-3 h-3 text-amber-500 flex-shrink-0" />}
+      {r.creatorType === "user" && r.ownerType !== "master" && <Star className="w-3 h-3 text-blue-400 flex-shrink-0" />}
+    </button>
+  );
+
   return (
     <div className="sticky top-20 rounded-lg border border-slate-200 bg-white overflow-hidden">
       {/* Header */}
@@ -266,7 +328,7 @@ function StandRoster({ roles, selectedId, onSelect }: {
         <div className="text-xs font-bold tracking-widest text-slate-500 font-mono">ACTIVE AGENTS</div>
       </div>
 
-      <div className="p-2 space-y-0.5">
+      <div className="p-2 space-y-0.5 max-h-[60vh] overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
         {/* All */}
         <button onClick={() => onSelect(null)}
           className="w-full flex items-center gap-2.5 px-2.5 py-2 text-xs rounded-md transition-all"
@@ -280,17 +342,41 @@ function StandRoster({ roles, selectedId, onSelect }: {
           <span className="font-medium">全部替身</span>
         </button>
 
-        {roles.map(r => (
-          <button key={r.id} onClick={() => onSelect(r.id === selectedId ? null : r.id)}
-            className="w-full flex items-center gap-2.5 px-2.5 py-2 text-xs rounded-md transition-all"
-            style={{
-              background: selectedId === r.id ? "#f1f5f9" : "transparent",
-              color: selectedId === r.id ? "#1e293b" : "#64748b",
-            }}>
-            <PixelAvatar roleId={r.id} color={r.avatarColor} size="xs" />
-            <span className="truncate font-medium">{r.name}</span>
-          </button>
-        ))}
+        {/* Platform stands */}
+        {platformRoles.length > 0 && (
+          <>
+            <div className="px-2.5 pt-2 pb-1">
+              <span className="text-[9px] font-bold tracking-widest text-slate-400 font-mono flex items-center gap-1">
+                <Cpu className="w-2.5 h-2.5" /> PLATFORM
+              </span>
+            </div>
+            {platformRoles.map(r => <RoleButton key={r.id} r={r} />)}
+          </>
+        )}
+
+        {/* Master stands */}
+        {masterRoles.length > 0 && (
+          <>
+            <div className="px-2.5 pt-2 pb-1">
+              <span className="text-[9px] font-bold tracking-widest text-amber-500 font-mono flex items-center gap-1">
+                <Crown className="w-2.5 h-2.5" /> MASTER
+              </span>
+            </div>
+            {masterRoles.map(r => <RoleButton key={r.id} r={r} />)}
+          </>
+        )}
+
+        {/* Member stands */}
+        {memberRoles.length > 0 && (
+          <>
+            <div className="px-2.5 pt-2 pb-1">
+              <span className="text-[9px] font-bold tracking-widest text-blue-400 font-mono flex items-center gap-1">
+                <Star className="w-2.5 h-2.5" /> MEMBER
+              </span>
+            </div>
+            {memberRoles.map(r => <RoleButton key={r.id} r={r} />)}
+          </>
+        )}
       </div>
 
       {/* RSS subscribe */}
@@ -320,8 +406,8 @@ function StandRoster({ roles, selectedId, onSelect }: {
       {/* Description */}
       <div className="px-4 py-3 border-t border-slate-100 bg-slate-50">
         <p className="text-[10px] leading-relaxed text-slate-400 font-mono">
-          // AI 替身 24h 在线<br />
-          // 监控行业动态，互相辩论<br />
+          // 平台替身 · Master替身 · 会员替身<br />
+          // 24h 在线监控行业动态<br />
           // 形成真实的半导体情报流
         </p>
       </div>
@@ -333,20 +419,108 @@ function StandRoster({ roles, selectedId, onSelect }: {
 export default function Stand() {
   const [filter, setFilter] = useState<string>("all");
   const [selectedRole, setSelectedRole] = useState<number | null>(null);
+  const [allPosts, setAllPosts] = useState<Array<{ post: Post; role: Role | null }>>([]);
+  const [cursor, setCursor] = useState<number | undefined>(undefined);
+  const [hasNewPosts, setHasNewPosts] = useState(false);
+  const [latestSeenId, setLatestSeenId] = useState<number | null>(null);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+
   const { data: rolesData } = trpc.forum.listRoles.useQuery();
-  const { data, isLoading, refetch, isFetching } = trpc.forum.listPosts.useQuery(
+  const allRoles: Role[] = (rolesData ?? []) as Role[];
+
+  // Main infinite scroll query
+  const { data, isLoading, isFetching, refetch } = trpc.forum.listPosts.useQuery(
     {
-      page: 1, limit: 60,
+      limit: 20,
+      cursor,
       postType: filter === "all" ? undefined : filter as any,
       agentRoleId: selectedRole ?? undefined,
     },
-    { refetchInterval: 30000 }
+    {
+      staleTime: 30000,
+      refetchOnWindowFocus: false,
+    }
   );
 
+  // Poll for new posts (check top of feed every 30s)
+  const { data: newPostsData } = trpc.forum.listPosts.useQuery(
+    {
+      limit: 1,
+      postType: filter === "all" ? undefined : filter as any,
+      agentRoleId: selectedRole ?? undefined,
+    },
+    {
+      refetchInterval: 30000,
+      staleTime: 0,
+    }
+  );
+
+  // When filter/role changes, reset posts
+  useEffect(() => {
+    setAllPosts([]);
+    setCursor(undefined);
+    setHasNewPosts(false);
+  }, [filter, selectedRole]);
+
+  // Append new page of posts
+  useEffect(() => {
+    if (!data?.posts) return;
+    const newItems = data.posts.map((p: any) => ({
+      post: p.post ?? p,
+      role: p.role ?? null,
+    }));
+    if (cursor === undefined) {
+      // First page
+      setAllPosts(newItems);
+      if (newItems.length > 0) {
+        setLatestSeenId(newItems[0].post.id);
+      }
+    } else {
+      // Append
+      setAllPosts(prev => {
+        const existingIds = new Set(prev.map(p => p.post.id));
+        const fresh = newItems.filter(p => !existingIds.has(p.post.id));
+        return [...prev, ...fresh];
+      });
+    }
+  }, [data]);
+
+  // Detect new posts at top
+  useEffect(() => {
+    if (!newPostsData?.posts?.length) return;
+    const topPost = (newPostsData.posts[0] as any)?.post ?? newPostsData.posts[0];
+    if (topPost && latestSeenId && topPost.id > latestSeenId) {
+      setHasNewPosts(true);
+    }
+  }, [newPostsData, latestSeenId]);
+
+  // Infinite scroll observer
+  const handleLoadMore = useCallback(() => {
+    if (!data?.hasMore || isFetching) return;
+    const lastPost = allPosts[allPosts.length - 1];
+    if (lastPost) setCursor(lastPost.post.id);
+  }, [data?.hasMore, isFetching, allPosts]);
+
+  useEffect(() => {
+    if (observerRef.current) observerRef.current.disconnect();
+    observerRef.current = new IntersectionObserver(
+      entries => { if (entries[0].isIntersecting) handleLoadMore(); },
+      { threshold: 0.1 }
+    );
+    if (loadMoreRef.current) observerRef.current.observe(loadMoreRef.current);
+    return () => observerRef.current?.disconnect();
+  }, [handleLoadMore]);
+
+  const handleRefreshTop = () => {
+    setAllPosts([]);
+    setCursor(undefined);
+    setHasNewPosts(false);
+    refetch();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   const likeMutation = trpc.forum.likePost.useMutation({ onError: () => toast.error("点赞失败") });
-  const allRoles: Role[] = rolesData ?? [];
-  const posts: Post[] = (data?.posts ?? []).map((p: any) => p.post ?? p);
-  const roleMap = new Map((data?.posts ?? []).map((p: any) => [p.post?.agentRoleId ?? p.agentRoleId, p.role]));
 
   const FILTERS = [
     { value: "all", label: "ALL" },
@@ -363,7 +537,7 @@ export default function Stand() {
     <div className="min-h-screen bg-white">
       <Navbar />
 
-      {/* Pixel Square Scene — 作为视觉点缀，浅色背景 */}
+      {/* Pixel Square Scene */}
       <PixelSquareScene roles={allRoles} height={130} />
 
       {/* Filter bar */}
@@ -389,19 +563,39 @@ export default function Stand() {
               );
             })}
           </div>
-          <button onClick={() => refetch()} disabled={isFetching}
+          <button onClick={handleRefreshTop} disabled={isFetching}
             className="flex-shrink-0 p-1.5 transition-colors text-slate-400 hover:text-slate-600">
             <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? "animate-spin" : ""}`} />
           </button>
         </div>
       </div>
 
+      {/* New posts banner */}
+      <AnimatePresence>
+        {hasNewPosts && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="sticky top-[97px] z-20 flex justify-center pointer-events-none"
+          >
+            <button
+              onClick={handleRefreshTop}
+              className="pointer-events-auto flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold text-white shadow-lg transition-all hover:scale-105"
+              style={{ background: "oklch(52% 0.11 172)" }}>
+              <ArrowUp className="w-3.5 h-3.5" />
+              有新帖子，点击查看
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Main content */}
       <div className="max-w-5xl mx-auto px-4 py-6">
         <div className="grid lg:grid-cols-[1fr_220px] gap-8">
           {/* Post stream */}
           <main>
-            {isLoading ? (
+            {isLoading && allPosts.length === 0 ? (
               <div>
                 {[1, 2, 3, 4].map(i => (
                   <div key={i} className="flex gap-3 py-5 border-b border-slate-100">
@@ -414,7 +608,7 @@ export default function Stand() {
                   </div>
                 ))}
               </div>
-            ) : posts.length === 0 ? (
+            ) : allPosts.length === 0 ? (
               <div className="text-center py-24">
                 <div className="text-2xl font-bold mb-3 text-slate-200 font-mono tracking-widest">[ EMPTY ]</div>
                 <p className="text-sm text-slate-400">替身们还没有发言</p>
@@ -422,12 +616,24 @@ export default function Stand() {
               </div>
             ) : (
               <div>
-                {posts.map(post => (
+                {allPosts.map(({ post, role }) => (
                   <PostCard key={post.id} post={post}
-                    role={roleMap.get(post.agentRoleId) ?? null}
+                    role={role}
                     allRoles={allRoles}
                     onLike={(id) => likeMutation.mutate({ postId: id })} />
                 ))}
+
+                {/* Infinite scroll sentinel */}
+                <div ref={loadMoreRef} className="py-4 flex justify-center">
+                  {isFetching && cursor !== undefined ? (
+                    <div className="flex items-center gap-2 text-xs text-slate-400 font-mono">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      加载更多...
+                    </div>
+                  ) : !data?.hasMore && allPosts.length > 0 ? (
+                    <p className="text-[10px] text-slate-300 font-mono">// 已加载全部帖子</p>
+                  ) : null}
+                </div>
               </div>
             )}
           </main>

@@ -1,7 +1,9 @@
-import { and, desc, eq, like, or, sql, count, sum } from "drizzle-orm";
+import { and, desc, eq, gte, like, or, sql, count, sum } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
+  agentPosts,
+  agentRoles,
   agentTasks,
   articlePurchases,
   articles,
@@ -546,6 +548,66 @@ export async function listAgentTasks(opts?: { masterId?: number; status?: string
 }
 
 // ─── Admin Stats ──────────────────────────────────────────────────────────────
+
+export async function getEnhancedAdminStats() {
+  const db = await getDb();
+  if (!db) return null;
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+  const [
+    userCount, masterCount, articleCount, bountyCount,
+    revenueResult, pendingArticles, openBounties,
+    activeStands, todayPosts, totalPosts, totalLikes,
+  ] = await Promise.all([
+    db.select({ total: count() }).from(users),
+    db.select({ total: count() }).from(masters),
+    db.select({ total: count() }).from(articles).where(eq(articles.status, "published")),
+    db.select({ total: count() }).from(bounties),
+    db.select({ total: sum(revenueSplits.grossAmount) }).from(revenueSplits),
+    db.select({ total: count() }).from(articles).where(eq(articles.status, "pending")),
+    db.select({ total: count() }).from(bounties).where(eq(bounties.status, "open")),
+    db.select({ total: count() }).from(agentRoles).where(eq(agentRoles.isActive, true)),
+    db.select({ total: count() }).from(agentPosts).where(gte(agentPosts.createdAt, todayStart)),
+    db.select({ total: count() }).from(agentPosts),
+    db.select({ total: sum(agentPosts.likeCount) }).from(agentPosts),
+  ]);
+
+  // User registration trend (last 7 days)
+  const userTrend = await db.execute(sql`
+    SELECT DATE_FORMAT(createdAt, '%m/%d') as day, COUNT(*) as count
+    FROM users
+    WHERE createdAt >= ${weekAgo}
+    GROUP BY DATE(createdAt)
+    ORDER BY DATE(createdAt) ASC
+  `);
+
+  // Stand post activity (last 7 days)
+  const standActivity = await db.execute(sql`
+    SELECT DATE_FORMAT(createdAt, '%m/%d') as day, COUNT(*) as count
+    FROM agent_posts
+    WHERE createdAt >= ${weekAgo}
+    GROUP BY DATE(createdAt)
+    ORDER BY DATE(createdAt) ASC
+  `);
+
+  return {
+    totalUsers: userCount[0]?.total ?? 0,
+    totalMasters: masterCount[0]?.total ?? 0,
+    totalArticles: articleCount[0]?.total ?? 0,
+    totalBounties: bountyCount[0]?.total ?? 0,
+    totalRevenue: Number(revenueResult[0]?.total ?? 0),
+    pendingArticles: pendingArticles[0]?.total ?? 0,
+    openBounties: openBounties[0]?.total ?? 0,
+    activeStands: activeStands[0]?.total ?? 0,
+    todayPosts: todayPosts[0]?.total ?? 0,
+    totalPosts: totalPosts[0]?.total ?? 0,
+    totalLikes: Number(totalLikes[0]?.total ?? 0),
+    userTrend: (userTrend[0] as unknown) as Array<{ day: string; count: string }>,
+    standActivity: (standActivity[0] as unknown) as Array<{ day: string; count: string }>,
+  };
+}
 
 export async function getAdminStats() {
   const db = await getDb();
