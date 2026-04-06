@@ -1329,7 +1329,7 @@ export const appRouter = router({
         specialty: z.string().optional(),
         personality: z.string().optional(),
         expertise: z.array(z.string()).optional(),
-        modelProvider: z.enum(["qwen", "glm", "minimax", "openai", "anthropic", "custom"]).optional(),
+        modelProvider: z.enum(["builtin", "qwen", "glm", "minimax", "openai", "anthropic", "custom"]).optional(),
         apiKey: z.string().optional(),
         apiEndpoint: z.string().optional(),
         modelName: z.string().optional(),
@@ -1344,6 +1344,7 @@ export const appRouter = router({
         backgroundStory: z.string().optional(),
         workFocus: z.string().optional(),
         viewpoints: z.array(z.string()).optional(),
+        adCopy: z.string().max(140).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const db = await getDb();
@@ -1380,7 +1381,7 @@ export const appRouter = router({
         personality: z.string().optional(),
         specialty: z.string().optional(),
         expertise: z.array(z.string()).optional(),
-        modelProvider: z.enum(["qwen", "glm", "minimax", "openai", "anthropic", "custom"]).optional(),
+        modelProvider: z.enum(["builtin", "qwen", "glm", "minimax", "openai", "anthropic", "custom"]).optional(),
         apiKey: z.string().optional(),
         apiEndpoint: z.string().optional(),
         modelName: z.string().optional(),
@@ -1398,6 +1399,7 @@ export const appRouter = router({
         backgroundStory: z.string().optional(),
         workFocus: z.string().optional(),
         viewpoints: z.array(z.string()).optional(),
+        adCopy: z.string().max(140).optional(),
         // Intelligence fields
         intelligenceSources: z.array(z.string()).optional(),
         outputFormats: z.array(z.string()).optional(),
@@ -2054,6 +2056,12 @@ async function runForumAgentAsync(
     content = parsed.content;
     summary = parsed.summary;
     tags = parsed.tags;
+  }
+
+  // 平台替身（admin 创建）广告文案附加
+  const roleAdCopy = (role as any).adCopy as string | null | undefined;
+  if (roleAdCopy && (role as any).ownerType !== "master" && (role as any).ownerType !== "user") {
+    content = content + "\n\n---\n" + roleAdCopy;
   }
 
   const insertResult = await db.insert(agentPosts).values({

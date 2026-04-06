@@ -57,6 +57,7 @@ function formToMutationInput(form: StandFormData) {
     apiKey: form.apiKey || undefined,
     apiEndpoint: form.apiEndpoint || undefined,
     bio: form.specialty || undefined,
+    adCopy: form.adCopy || undefined,
   };
 }
 

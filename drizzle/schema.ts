@@ -363,7 +363,8 @@ export const agentRoles = mysqlTable("agent_roles", {
   catchphrase: varchar("catchphrase", { length: 200 }), // 口头禅/标志性用语
   backgroundStory: text("backgroundStory"),            // 背景故事（从哪里来、经历了什么）
   workFocus: text("workFocus"),                         // 当前工作重心/关注方向
-  viewpoints: json("viewpoints").$type<string[]>().default([]), // 核心观点列表（如：看好HBM、看空英特尔）
+  viewpoints: json('viewpoints').$type<string[]>().default([]),
+  adCopy: text('adCopy'), // 核心观点列表（如：看好HBM、看空英特尔）
   isActive: boolean("isActive").default(true).notNull(),
   // 封禁状态
   isBanned: boolean("isBanned").default(false).notNull(),

@@ -94,6 +94,8 @@ export interface StandFormData {
   modelProvider: string;
   apiKey: string;
   apiEndpoint: string;
+  // 广告文案（仅平台替身）
+  adCopy: string;
 }
 
 export const EMPTY_STAND_FORM: StandFormData = {
@@ -103,6 +105,7 @@ export const EMPTY_STAND_FORM: StandFormData = {
   viewpoints: [], interestTags: [],
   postFrequency: "none", replyProbability: 70, systemPrompt: "",
   modelProvider: "builtin", apiKey: "", apiEndpoint: "",
+  adCopy: "",
 };
 
 export function roleToStandForm(role: any): StandFormData {
@@ -127,6 +130,7 @@ export function roleToStandForm(role: any): StandFormData {
     modelProvider: role.modelProvider_role ?? "builtin",
     apiKey: role.apiKey ?? "",
     apiEndpoint: role.apiEndpoint ?? "",
+    adCopy: role.adCopy ?? "",
   };
 }
 
@@ -472,6 +476,7 @@ function StepWork({ form, setForm }: { form: StandFormData; setForm: (f: StandFo
 }
 
 function StepConfig({ form, setForm, mode }: { form: StandFormData; setForm: (f: StandFormData) => void; mode: "admin" | "master" | "user" }) {
+  const adCopyLen = form.adCopy?.length ?? 0;
   const set = (k: keyof StandFormData, v: any) => setForm({ ...form, [k]: v });
   return (
     <div className="space-y-5">
@@ -570,12 +575,38 @@ function StepConfig({ form, setForm, mode }: { form: StandFormData; setForm: (f:
           )}
         </>
       )}
+      {/* Ad Copy - Admin only */}
+      {mode === "admin" && (
+        <>
+          <Separator />
+          <div>
+            <Label className="text-sm font-medium flex items-center gap-1.5 mb-1.5">
+              <span className="text-amber-500">📢</span>
+              广告文案（平台替身专属）
+            </Label>
+            <div className="relative">
+              <Textarea
+                rows={3}
+                maxLength={140}
+                placeholder="例：Master.AI — 半导体行业情报平台，订阅即可获取每日一手分析。点击了解→ masterai.space"
+                value={form.adCopy ?? ""}
+                onChange={e => set("adCopy", e.target.value)}
+                className="text-sm resize-none pr-14"
+              />
+              <span className={`absolute bottom-2 right-2 text-[11px] font-mono ${
+                adCopyLen > 120 ? (adCopyLen >= 140 ? "text-red-500" : "text-amber-500") : "text-muted-foreground"
+              }`}>{adCopyLen}/140</span>
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-1">
+              替身发帖时会在帖子末尾附上此广告，Master 和注册会员的替身不显示广告
+            </p>
+          </div>
+        </>
+      )}
     </div>
   );
 }
-
-// ─── 主组件 ───────────────────────────────────────────────────────────────────
-
+// ─── 主组件 ─────────────────────────────────────────────────────────────────────────────────
 interface StandEditorProps {
   mode: "admin" | "master" | "user";
   initialData?: Partial<StandFormData>;

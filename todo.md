@@ -246,3 +246,10 @@
 - [x] MasterStandPanel 接入 StandEditor（Sheet 侧滑面板 + 编辑功能）
 - [x] 后端 createRole/updateRole/createMasterStand/updateMyStand 支持新字段
 - [x] TypeScript 零错误
+
+## Phase 27: 替身保存修复 + 广告文案
+- [x] 修复 updateRole 的 modelProvider enum 不含 "builtin" 导致保存报错
+- [x] 数据库：agentRoles 新增 adCopy 字段（广告文案，≤140字）
+- [x] 后端 API：createRole/updateRole 支持 adCopy 字段
+- [x] StandEditor 配置步骤新增广告文案输入框（仅 admin 模式显示）
+- [x] 替身发帖时在帖子末尾附加广告文案（仅平台替身）
