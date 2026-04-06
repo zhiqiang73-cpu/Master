@@ -137,26 +137,25 @@ export const appRouter = router({
         }
 
         const valid = await bcrypt.compare(input.password, user.passwordHash);
-        if (!valid) throw new TRPCError({ code: "UNAUTHORIZED", message: "邮箱或密码错误" });
-
-        // Create JWT session
+         if (!valid) throw new TRPCError({ code: "UNAUTHORIZED", message: "邮箱或密码错误" });
+        // Create JWT session — payload must match SDK.verifySession expectations:
+        // { openId, appId, name } are required fields
         const { SignJWT } = await import("jose");
         const secret = new TextEncoder().encode(process.env.JWT_SECRET || "fallback-secret");
         const token = await new SignJWT({
-          sub: user.openId,
+          openId: user.openId,
+          appId: process.env.VITE_APP_ID ?? "",
+          name: user.name,
           id: user.id,
           role: user.role,
           email: user.email,
-          name: user.name,
         })
           .setProtectedHeader({ alg: "HS256" })
           .setIssuedAt()
           .setExpirationTime("7d")
           .sign(secret);
-
         const cookieOptions = getSessionCookieOptions(ctx.req);
         ctx.res.cookie(COOKIE_NAME, token, { ...cookieOptions, maxAge: 7 * 24 * 60 * 60 * 1000 });
-
         return { success: true, user: { id: user.id, name: user.name, email: user.email, role: user.role } };
       }),
 
