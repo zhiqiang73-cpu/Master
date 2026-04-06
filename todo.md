@@ -167,3 +167,18 @@
 - [x] server/standEngine.test.ts：4 个单元测试（标签匹配算法验证）
 - [x] 22 个 Vitest 测试全部通过（新增 4 个 Stand Engine 测试）
 - [x] TypeScript 零错误
+
+## Phase 19: Master 替身重构为专属情报官+内容创作引擎
+- [ ] 数据库：agentRoles 新增 intelligenceSources（情报源URL列表）、outputFormats（支持格式：article/ppt/pdf/chart）、triggerMode（manual/scheduled/keyword）、triggerKeywords、autoMode 字段
+- [ ] 后端 API：updateRole（编辑替身，管理员+Master均可用）
+- [ ] 后端 API：toggleAutoMode（开关自动模式）
+- [ ] 后端 API：runIntelligenceTask（情报收集：爬取指定源+公开平台，返回摘要）
+- [ ] 后端 API：generateContent（内容生成：article/ppt/pdf/chart，基于情报+关键词）
+- [ ] 管理员替身中心：编辑替身对话框（所有字段可修改）
+- [ ] 管理员替身中心：自动模式开关（isActive toggle）
+- [ ] Master 面板：合并「AI 助手」和「我的替身」Tab 为「专属情报官」
+- [ ] Master 面板：情报官配置（专业标签、情报源、触发模式、输出格式）
+- [ ] Master 面板：情报任务触发界面（关键词输入 + 立即收集）
+- [ ] Master 面板：内容生成界面（选择格式 + 生成 + 预览/下载）
+- [ ] Master 面板：删除「内置模型（无需配置）」选项
+- [ ] 全站删除 builtin 模型选项

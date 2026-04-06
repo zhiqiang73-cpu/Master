@@ -60,7 +60,7 @@ import { z } from "zod";
 import { nanoid } from "nanoid";
 import { masters, users, smartContracts, contentModerationLogs, aiMasterConfigs, agentRoles, agentPosts, agentComments, agentTaskLogs } from "../drizzle/schema";
 import { storagePut } from "./storage";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 
 // ─── Admin Guard ──────────────────────────────────────────────────────────────
 const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
@@ -1270,9 +1270,10 @@ export const appRouter = router({
         avatarEmoji: z.string().optional(),
         avatarColor: z.string().optional(),
         bio: z.string().optional(),
+        specialty: z.string().optional(),
         personality: z.string().optional(),
         expertise: z.array(z.string()).optional(),
-        modelProvider: z.enum(["builtin", "qwen", "glm", "minimax", "openai", "anthropic", "custom"]).optional(),
+        modelProvider: z.enum(["qwen", "glm", "minimax", "openai", "anthropic", "custom"]).optional(),
         apiKey: z.string().optional(),
         apiEndpoint: z.string().optional(),
         modelName: z.string().optional(),
@@ -1313,10 +1314,12 @@ export const appRouter = router({
       .input(z.object({
         id: z.number(),
         name: z.string().optional(),
+        alias: z.string().optional(),
         bio: z.string().optional(),
         personality: z.string().optional(),
+        specialty: z.string().optional(),
         expertise: z.array(z.string()).optional(),
-        modelProvider: z.enum(["builtin", "qwen", "glm", "minimax", "openai", "anthropic", "custom"]).optional(),
+        modelProvider: z.enum(["qwen", "glm", "minimax", "openai", "anthropic", "custom"]).optional(),
         apiKey: z.string().optional(),
         apiEndpoint: z.string().optional(),
         modelName: z.string().optional(),
@@ -1329,6 +1332,11 @@ export const appRouter = router({
         personalityTags: z.array(z.string()).optional(),
         interestTags: z.array(z.string()).optional(),
         replyProbability: z.number().min(0).max(100).optional(),
+        // Intelligence fields
+        intelligenceSources: z.array(z.string()).optional(),
+        outputFormats: z.array(z.string()).optional(),
+        triggerMode: z.enum(["manual", "scheduled", "keyword"]).optional(),
+        triggerKeywords: z.array(z.string()).optional(),
       }))
       .mutation(async ({ input }) => {
         const db = await getDb();
@@ -1548,6 +1556,88 @@ export const appRouter = router({
         .where(eq((agentRoles as any).ownerId, master.id))
         .orderBy(agentRoles.createdAt);
     }),
+    // Master: update their own stand (intelligence config)
+    updateMyStand: masterProcedure
+      .input(z.object({
+        id: z.number(),
+        name: z.string().optional(),
+        personality: z.string().optional(),
+        specialty: z.string().optional(),
+        expertise: z.array(z.string()).optional(),
+        personalityTags: z.array(z.string()).optional(),
+        interestTags: z.array(z.string()).optional(),
+        modelProvider: z.enum(["qwen", "glm", "minimax", "openai", "anthropic", "custom"]).optional(),
+        apiKey: z.string().optional(),
+        apiEndpoint: z.string().optional(),
+        modelName: z.string().optional(),
+        systemPrompt: z.string().optional(),
+        intelligenceSources: z.array(z.string()).optional(),
+        outputFormats: z.array(z.string()).optional(),
+        triggerMode: z.enum(["manual", "scheduled", "keyword"]).optional(),
+        triggerKeywords: z.array(z.string()).optional(),
+        postFrequency: z.string().optional(),
+        isActive: z.boolean().optional(),
+        avatarEmoji: z.string().optional(),
+        avatarColor: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        const master = await getMasterByUserId(ctx.user.id);
+        if (!master) throw new TRPCError({ code: "FORBIDDEN", message: "需要 Master 档案" });
+        // Verify ownership
+        const [stand] = await db.select().from(agentRoles)
+          .where(and(eq(agentRoles.id, input.id), eq((agentRoles as any).ownerId, master.id)));
+        if (!stand) throw new TRPCError({ code: "NOT_FOUND", message: "替身不存在或无权限" });
+        const { id, modelProvider, ...rest } = input;
+        const updateData: Record<string, unknown> = { ...rest };
+        if (modelProvider) updateData.modelProvider_role = modelProvider;
+        await db.update(agentRoles).set(updateData as any).where(eq(agentRoles.id, id));
+        return { success: true };
+      }),
+    // Master/Admin: run intelligence collection task
+    runIntelligenceTask: protectedProcedure
+      .input(z.object({
+        agentRoleId: z.number(),
+        keywords: z.array(z.string()).optional(),
+        customSources: z.array(z.string()).optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        const [role] = await db.select().from(agentRoles).where(eq(agentRoles.id, input.agentRoleId));
+        if (!role) throw new TRPCError({ code: "NOT_FOUND" });
+        // Verify access
+        if (ctx.user.role !== "admin") {
+          const master = await getMasterByUserId(ctx.user.id);
+          if (!master || (role as any).ownerId !== master.id) throw new TRPCError({ code: "FORBIDDEN" });
+        }
+        // Run async
+        runIntelligenceTaskAsync(role as any, input.keywords ?? [], input.customSources ?? []).catch(console.error);
+        return { success: true, message: "情报收集任务已启动，通常需要 30-60 秒" };
+      }),
+    // Master/Admin: generate content from intelligence
+    generateContent: protectedProcedure
+      .input(z.object({
+        agentRoleId: z.number(),
+        format: z.enum(["article", "ppt", "pdf", "chart"]),
+        topic: z.string(),
+        keywords: z.array(z.string()).optional(),
+        language: z.enum(["zh", "en", "ja"]).default("zh"),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        const [role] = await db.select().from(agentRoles).where(eq(agentRoles.id, input.agentRoleId));
+        if (!role) throw new TRPCError({ code: "NOT_FOUND" });
+        // Verify access
+        if (ctx.user.role !== "admin") {
+          const master = await getMasterByUserId(ctx.user.id);
+          if (!master || (role as any).ownerId !== master.id) throw new TRPCError({ code: "FORBIDDEN" });
+        }
+        const result = await generateContentAsync(role as any, input.format, input.topic, input.keywords ?? [], input.language);
+        return result;
+      }),
     // Admin: list task logs
     taskLogs: adminProcedure
       .input(z.object({ agentRoleId: z.number().optional(), limit: z.number().default(50) }).optional())
@@ -1910,4 +2000,125 @@ export async function runForumAgentFromScheduler(role: {
     "",
     "zh"
   );
+}
+
+// ─── Intelligence Task Runner ─────────────────────────────────────────────────
+async function runIntelligenceTaskAsync(
+  role: { id: number; name: string; specialty: string | null; expertise: unknown; interestTags: string[] | null; intelligenceSources: string[] | null; modelProvider_role: string; apiKey: string | null; modelName: string | null; systemPrompt: string | null },
+  keywords: string[],
+  customSources: string[],
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  // Log the task
+  const logInsert = await db.insert(agentTaskLogs).values({
+    agentRoleId: role.id,
+    taskType_log: "intelligence_collect",
+    taskStatus_log: "running",
+    triggeredBy: "manual",
+    prompt: keywords.join(", ") || "auto",
+  } as any);
+  const taskLogId = (logInsert as any).insertId ?? 0;
+  try {
+    const specialty = role.specialty ?? (Array.isArray(role.expertise) ? (role.expertise as string[]).join(", ") : "行业");
+    const tags = Array.isArray(role.interestTags) ? role.interestTags : [];
+    const sources = [...(role.intelligenceSources ?? []), ...customSources];
+    const kws = keywords.length > 0 ? keywords : tags.slice(0, 5);
+
+    const sourceHint = sources.length > 0
+      ? `\n\n可参考情报源：\n${sources.map(s => `- ${s}`).join("\n")}`
+      : "";
+
+    const prompt = `你是 ${role.name}，一位专注于「${specialty}」领域的行业情报官。
+
+请围绕以下关键词收集并整理最新行业情报：
+关键词：${kws.join("、") || specialty}
+${sourceHint}
+
+请输出一份结构化情报摘要，包含：
+1. 市场需求动态（用户/企业在寻找什么解决方案）
+2. 行业热点事件（最近 1-2 周内的重要动态）
+3. 竞争格局变化（主要玩家动向）
+4. 可供 Master 撰写的文章选题（3-5 个）
+
+每个部分不超过 200 字，语言简洁专业。`;
+
+    const resp = await invokeLLM({
+      messages: [
+        { role: "system", content: role.systemPrompt ?? `你是 ${role.name}，专业的行业情报官。` },
+        { role: "user", content: prompt },
+      ],
+    });
+    const summary = (resp.choices?.[0]?.message?.content as string) ?? "";
+    if (taskLogId) await db.update(agentTaskLogs).set({ taskStatus_log: "success", resultSummary: summary.slice(0, 500) } as any).where(eq(agentTaskLogs.id, taskLogId));
+    console.log(`[IntelligenceTask] ${role.name} completed, summary length: ${summary.length}`);
+  } catch (err: any) {
+    if (taskLogId) await db.update(agentTaskLogs).set({ taskStatus_log: "failed", errorMessage: err?.message ?? "Unknown error" } as any).where(eq(agentTaskLogs.id, taskLogId));
+    console.error(`[IntelligenceTask] ${role.name} failed:`, err?.message);
+  }
+}
+
+// ─── Content Generation Runner ────────────────────────────────────────────────
+async function generateContentAsync(
+  role: { id: number; name: string; specialty: string | null; expertise: unknown; personality: string | null; systemPrompt: string | null; modelProvider_role: string; apiKey: string | null; modelName: string | null },
+  format: "article" | "ppt" | "pdf" | "chart",
+  topic: string,
+  keywords: string[],
+  language: string,
+): Promise<{ format: string; title: string; content: string; downloadUrl?: string }> {
+  const { invokeLLM } = await import("./_core/llm.js");
+  const specialty = role.specialty ?? (Array.isArray(role.expertise) ? (role.expertise as string[]).join(", ") : "行业");
+  const langLabel = language === "zh" ? "中文" : language === "ja" ? "日文" : "英文";
+
+  let systemMsg = role.systemPrompt ?? `你是 ${role.name}，专注于「${specialty}」领域的专家。`;
+  let userMsg = "";
+
+  if (format === "article") {
+    userMsg = `请以专业作者身份，用${langLabel}撰写一篇关于「${topic}」的深度文章。
+关键词：${keywords.join("、") || topic}
+要求：
+- 标题吸引人，正文 1500-2500 字
+- 结构清晰：引言 → 背景分析 → 核心观点（3-4个）→ 数据支撑 → 结论展望
+- 语言专业但易读，适合行业从业者
+- 输出格式：Markdown`;
+  } else if (format === "ppt") {
+    userMsg = `请为主题「${topic}」生成一份 PPT 大纲，用${langLabel}。
+关键词：${keywords.join("、") || topic}
+要求：
+- 8-12 张幻灯片
+- 每张包含：标题、3-5 个要点、演讲备注
+- 格式：每张以 "## 第X张：[标题]" 开头，要点用 "- " 列出，备注用 "> " 标注
+- 适合 15-20 分钟演讲`;
+  } else if (format === "pdf") {
+    userMsg = `请生成一份关于「${topic}」的专业研究报告，用${langLabel}。
+关键词：${keywords.join("、") || topic}
+要求：
+- 执行摘要（200字）
+- 市场规模与增长趋势
+- 主要参与者分析
+- 技术/产品趋势
+- 风险与机遇
+- 结论与建议
+- 总计 2000-3000 字，Markdown 格式`;
+  } else if (format === "chart") {
+    userMsg = `请为「${topic}」生成数据分析报告，用${langLabel}。
+关键词：${keywords.join("、") || topic}
+要求：
+- 输出 JSON 格式，包含以下字段：
+  - title: 报告标题
+  - summary: 200字摘要
+  - charts: 数组，每个图表包含 { type: "bar"|"line"|"pie", title, data: [{label, value}] }（3-4个图表）
+  - insights: 3-5条关键洞察
+- 数据可以是合理估算，需注明数据来源说明`;
+  }
+
+  const resp = await invokeLLM({
+    messages: [
+      { role: "system", content: systemMsg },
+      { role: "user", content: userMsg },
+    ],
+  });
+  const content = (resp.choices?.[0]?.message?.content as string) ?? "";
+  const title = `${role.name} · ${topic} · ${format.toUpperCase()}`;
+  return { format, title, content };
 }

@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
-import AiAssistantPanel from "@/components/AiAssistantPanel";
-import MasterStandPanel from "@/components/MasterStandPanel";
+import MasterIntelligencePanel from "@/components/MasterIntelligencePanel";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -21,7 +20,7 @@ import {
   Loader2, Plus, BookOpen, DollarSign, Users, Send,
   Eye, CheckCircle, Clock, Award,
   TrendingUp, FileText, Zap, ChevronRight, Star,
-  AlertCircle, RefreshCw, Edit3
+  AlertCircle, RefreshCw, Edit3, Bot
 } from "lucide-react";
 
 const STATUS_MAP: Record<string, { label: string; cls: string }> = {
@@ -210,13 +209,9 @@ export default function MasterDashboard() {
               <Award className="w-3.5 h-3.5" />
               个人资料
             </TabsTrigger>
-            <TabsTrigger value="ai-assistant" className="gap-1.5">
-              <Zap className="w-3.5 h-3.5" />
-              AI 助手
-            </TabsTrigger>
-            <TabsTrigger value="my-stand" className="gap-1.5">
-              <span className="text-sm leading-none">⚡</span>
-              我的替身
+            <TabsTrigger value="intelligence" className="gap-1.5">
+              <Bot className="w-3.5 h-3.5" />
+              专属情报官
             </TabsTrigger>
           </TabsList>
 
@@ -503,13 +498,9 @@ export default function MasterDashboard() {
             )}
           </TabsContent>
 
-          {/* AI Assistant Tab */}
-          <TabsContent value="ai-assistant">
-            <AiAssistantPanel />
-          </TabsContent>
-          {/* My Stand Tab */}
-          <TabsContent value="my-stand">
-            <MasterStandPanel />
+          {/* Intelligence Officer Tab */}
+          <TabsContent value="intelligence">
+            <MasterIntelligencePanel />
           </TabsContent>
         </Tabs>
       </main>

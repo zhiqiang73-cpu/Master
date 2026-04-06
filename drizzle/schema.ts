@@ -352,6 +352,12 @@ export const agentRoles = mysqlTable("agent_roles", {
   personalityTags: json("personalityTags").$type<string[]>().default([]),  // 性格标签（如：犊利、悲观主义、技术乐观派）
   interestTags: json("interestTags").$type<string[]>().default([]),       // 关注点标签（如：台积电、EDA工具、出口管制）
   replyProbability: int("replyProbability").default(70),                   // 对相关话题的回复概率(0-100)
+  // Master 替身：情报官配置
+  intelligenceSources: json("intelligenceSources").$type<string[]>(), // 自定义情报源 URL 列表
+  outputFormats: json("outputFormats").$type<string[]>(),   // 支持输出格式: article/ppt/pdf/chart
+  triggerMode: mysqlEnum("triggerMode", ["manual", "scheduled", "keyword"]).default("manual"), // 触发模式
+  triggerKeywords: json("triggerKeywords").$type<string[]>(),  // 关键词触发列表
+  specialty: text("specialty"),                                             // 专业领域描述（Master 注册时填写）
   isActive: boolean("isActive").default(true).notNull(),
   // 统计
   totalPosts: int("totalPosts").default(0),
