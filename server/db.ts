@@ -452,6 +452,61 @@ export async function addEmailSubscriber(email: string, masterId?: number) {
     .onDuplicateKeyUpdate({ set: { isActive: true } });
 }
 
+export async function unsubscribeEmail(email: string) {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(emailSubscribers)
+    .set({ isActive: false })
+    .where(eq(emailSubscribers.email, email));
+}
+
+export async function listEmailSubscribers(opts?: { search?: string; page?: number; limit?: number; isActive?: boolean }) {
+  const db = await getDb();
+  if (!db) return { total: 0, subscribers: [] };
+  const page = opts?.page ?? 1;
+  const limit = opts?.limit ?? 50;
+  const offset = (page - 1) * limit;
+  const conditions: ReturnType<typeof eq>[] = [];
+  if (opts?.isActive !== undefined) conditions.push(eq(emailSubscribers.isActive, opts.isActive));
+  if (opts?.search) conditions.push(sql`${emailSubscribers.email} LIKE ${`%${opts.search}%`}`);
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+  const [totalResult, subscribers] = await Promise.all([
+    db.select({ total: sql<number>`COUNT(*)` }).from(emailSubscribers).where(where),
+    db.select().from(emailSubscribers).where(where).orderBy(desc(emailSubscribers.createdAt)).limit(limit).offset(offset),
+  ]);
+  return { total: Number(totalResult[0]?.total ?? 0), subscribers };
+}
+
+export async function getSubscriberStats() {
+  const db = await getDb();
+  if (!db) return { total: 0, active: 0, thisMonth: 0 };
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const [total, active, thisMonth] = await Promise.all([
+    db.select({ count: sql<number>`COUNT(*)` }).from(emailSubscribers),
+    db.select({ count: sql<number>`COUNT(*)` }).from(emailSubscribers).where(eq(emailSubscribers.isActive, true)),
+    db.select({ count: sql<number>`COUNT(*)` }).from(emailSubscribers).where(
+      and(eq(emailSubscribers.isActive, true), sql`${emailSubscribers.createdAt} >= ${startOfMonth}`)
+    ),
+  ]);
+  return {
+    total: Number(total[0]?.count ?? 0),
+    active: Number(active[0]?.count ?? 0),
+    thisMonth: Number(thisMonth[0]?.count ?? 0),
+  };
+}
+
+export async function getActiveSubscriberEmails(): Promise<string[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .select({ email: emailSubscribers.email })
+    .from(emailSubscribers)
+    .where(eq(emailSubscribers.isActive, true));
+  return rows.map(r => r.email);
+}
+
 // ─── Agent Tasks ──────────────────────────────────────────────────────────────
 
 export async function createAgentTask(data: typeof agentTasks.$inferInsert) {

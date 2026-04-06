@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { trpc } from "@/lib/trpc";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import EmailSubscribeBox from "@/components/EmailSubscribeBox";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -313,6 +314,16 @@ export default function Insights() {
         )}
       </main>
 
+      {/* Newsletter strip */}
+      <section className="py-12 bg-[var(--patina)]/5 border-t border-[var(--patina)]/10">
+        <div className="container max-w-2xl">
+          <EmailSubscribeBox
+            variant="inline"
+            title="订阅洞察周报"
+            description="每周收到半导体行业最新动态和深度分析，免费发送至您的邮箱。前3个月全部内容免费开放。"
+          />
+        </div>
+      </section>
       <Footer />
     </div>
   );

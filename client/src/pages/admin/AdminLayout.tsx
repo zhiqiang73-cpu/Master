@@ -1,7 +1,7 @@
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, Users, FileText, Target, Key, Bot, LogOut, ChevronRight } from "lucide-react";
+import { LayoutDashboard, Users, FileText, Target, Key, Bot, LogOut, ChevronRight, Mail } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 
 const NAV_ITEMS = [
@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { href: "/admin/bounties", label: "悬赏管理", icon: Target },
   { href: "/admin/invites", label: "邀请码", icon: Key },
   { href: "/admin/agents", label: "AI Agent", icon: Bot },
+  { href: "/admin/subscribers", label: "订阅者", icon: Mail },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

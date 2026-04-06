@@ -5,9 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import { useState } from "react";
+import EmailSubscribeBox from "@/components/EmailSubscribeBox";
 import { ArrowRight, Zap, Shield, TrendingUp, Award, BookOpen, Target } from "lucide-react";
-import { toast } from "sonner";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 24 },
@@ -15,13 +14,8 @@ const fadeUp = {
 };
 
 export default function Home() {
-  const [email, setEmail] = useState("");
   const { data: masters, isLoading: mastersLoading } = trpc.masters.list.useQuery({ limit: 6 });
   const { data: articlesData, isLoading: articlesLoading } = trpc.articles.list.useQuery({ limit: 6 });
-  const subscribeMutation = trpc.newsletter.subscribe.useMutation({
-    onSuccess: () => { toast.success("订阅成功！"); setEmail(""); },
-    onError: () => toast.error("订阅失败，请稍后重试"),
-  });
 
   const articles = articlesData?.articles ?? [];
 
@@ -299,30 +293,19 @@ export default function Home() {
       </section>
 
       {/* ── Newsletter ── */}
-      <section className="py-20">
+      <section className="py-20 bg-gradient-to-b from-transparent to-[var(--patina)]/5">
         <div className="container max-w-2xl text-center">
           <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} custom={0} variants={fadeUp}>
             <span className="font-mono text-xs text-[var(--patina)] tracking-widest uppercase">每周精选</span>
             <h2 className="font-display text-2xl font-bold mt-2 mb-3">行业深度分析，直达邮箱</h2>
             <p className="text-sm text-muted-foreground mb-8">
-              每周收到精选的半导体行业洞察，来自一线 Master 的真实判断。
+              每周收到精选的半导体行业洞察，来自一线 Master 的真实判断。前3个月全部内容免费开放。
             </p>
-            <div className="flex gap-2 max-w-sm mx-auto">
-              <input
-                type="email"
-                placeholder="your@email.com"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                className="flex-1 px-3 py-2 text-sm border border-border rounded-md bg-card focus:outline-none focus:ring-1 focus:ring-[var(--patina)]"
-              />
-              <Button
-                onClick={() => email && subscribeMutation.mutate({ email })}
-                disabled={subscribeMutation.isPending}
-                className="bg-[var(--patina)] hover:bg-[var(--patina-dark)] text-white"
-              >
-                订阅
-              </Button>
-            </div>
+            <EmailSubscribeBox
+              variant="hero"
+              description=""
+              className="mx-auto"
+            />
           </motion.div>
         </div>
       </section>

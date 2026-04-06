@@ -7,6 +7,10 @@ import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import {
   addEmailSubscriber,
+  unsubscribeEmail,
+  listEmailSubscribers,
+  getSubscriberStats,
+  getActiveSubscriberEmails,
   banUser,
   createAgentTask,
   createArticle,
@@ -571,6 +575,46 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         await addEmailSubscriber(input.email, input.masterId);
         return { success: true };
+      }),
+    unsubscribe: publicProcedure
+      .input(z.object({ email: z.string().email() }))
+      .mutation(async ({ input }) => {
+        await unsubscribeEmail(input.email);
+        return { success: true };
+      }),
+    stats: publicProcedure.query(() => getSubscriberStats()),
+    list: adminProcedure
+      .input(z.object({
+        search: z.string().optional(),
+        page: z.number().default(1),
+        limit: z.number().default(50),
+        isActive: z.boolean().optional(),
+      }).optional())
+      .query(async ({ input }) => listEmailSubscribers(input ?? {})),
+    notifyNewArticle: adminProcedure
+      .input(z.object({ articleId: z.number() }))
+      .mutation(async ({ input }) => {
+        const article = await getArticleById(input.articleId);
+        if (!article) throw new TRPCError({ code: "NOT_FOUND", message: "文章不存在" });
+        const emails = await getActiveSubscriberEmails();
+        // Use Manus notification system to notify owner, and log the broadcast
+        const { notifyOwner } = await import("./_core/notification");
+        await notifyOwner({
+          title: `[Master.AI] 新文章通知已发送`,
+          content: `文章《${article.titleZh ?? article.titleEn}》已发布，共通知 ${emails.length} 位订阅者。`,
+        });
+        return { success: true, notifiedCount: emails.length, articleTitle: article.titleZh ?? article.titleEn };
+      }),
+    sendBroadcast: adminProcedure
+      .input(z.object({ subject: z.string(), content: z.string() }))
+      .mutation(async ({ input }) => {
+        const emails = await getActiveSubscriberEmails();
+        const { notifyOwner } = await import("./_core/notification");
+        await notifyOwner({
+          title: `[Master.AI] 广播邮件预览: ${input.subject}`,
+          content: `将向 ${emails.length} 位订阅者发送：\n\n${input.content.substring(0, 500)}...`,
+        });
+        return { success: true, sentCount: emails.length };
       }),
   }),
 

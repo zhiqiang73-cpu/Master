@@ -18,6 +18,7 @@ import Dashboard from "./pages/Dashboard";
 import MasterDashboard from "./pages/MasterDashboard";
 import Insights from "./pages/Insights";
 import Subscribe from "./pages/Subscribe";
+import Unsubscribe from "./pages/Unsubscribe";
 import AdminLayout from "./pages/admin/AdminLayout";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminUsers from "./pages/admin/AdminUsers";
@@ -25,6 +26,7 @@ import AdminArticles from "./pages/admin/AdminArticles";
 import AdminBounties from "./pages/admin/AdminBounties";
 import AdminInviteCodes from "./pages/admin/AdminInviteCodes";
 import AdminAgents from "./pages/admin/AdminAgents";
+import AdminSubscribers from "./pages/admin/AdminSubscribers";
 
 function Router() {
   return (
@@ -43,6 +45,7 @@ function Router() {
       <Route path="/pricing" component={Pricing} />
       <Route path="/about" component={About} />
       <Route path="/contributor" component={Contributor} />
+      <Route path="/unsubscribe" component={Unsubscribe} />
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/master/dashboard" component={MasterDashboard} />
       {/* Admin routes */}
@@ -85,6 +88,13 @@ function Router() {
         {() => (
           <AdminLayout>
             <AdminAgents />
+          </AdminLayout>
+        )}
+      </Route>
+      <Route path="/admin/subscribers">
+        {() => (
+          <AdminLayout>
+            <AdminSubscribers />
           </AdminLayout>
         )}
       </Route>

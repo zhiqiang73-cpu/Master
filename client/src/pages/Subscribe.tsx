@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link } from "wouter";
+import EmailSubscribeBox from "@/components/EmailSubscribeBox";
 import { motion } from "framer-motion";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -301,8 +302,16 @@ export default function Subscribe() {
           </>
         )}
 
+        {/* Email Newsletter */}
+        <div className="mt-12">
+          <EmailSubscribeBox
+            variant="inline"
+            title="订阅免费周报"
+            description="即使还没有决定订阅哪位 Master，先订阅我们的免费周报，每周收到半导体行业深度分析。前3个月全部内容免费开放。"
+          />
+        </div>
         {/* CTA for becoming a Master */}
-        <div className="mt-16 border border-[var(--patina)]/20 rounded-xl p-8 bg-[var(--patina)]/5 text-center">
+        <div className="mt-10 border border-[var(--patina)]/20 rounded-xl p-8 bg-[var(--patina)]/5 text-center">
           <Award className="w-8 h-8 text-[var(--patina)] mx-auto mb-3" />
           <h3 className="text-lg font-bold text-foreground mb-2">您是半导体行业专家？</h3>
           <p className="text-muted-foreground text-sm mb-5 max-w-md mx-auto">
