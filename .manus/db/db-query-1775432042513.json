@@ -1,0 +1,9 @@
+{
+  "query": "CREATE TABLE `article_purchases` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`userId` int NOT NULL,\n\t`articleId` int NOT NULL,\n\t`amount` decimal(10,2) NOT NULL,\n\t`stripePaymentIntentId` varchar(255),\n\t`status` enum('pending','completed','refunded') NOT NULL DEFAULT 'completed',\n\t`createdAt` timestamp NOT NULL DEFAULT (now()),\n\tCONSTRAINT `article_purchases_id` PRIMARY KEY(`id`)\n)",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 44k1efRsdsVyDeY.root --database 8CrHDvBhNX8k2hxK9ZrGb8 --execute CREATE TABLE `article_purchases` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`userId` int NOT NULL,\n\t`articleId` int NOT NULL,\n\t`amount` decimal(10,2) NOT NULL,\n\t`stripePaymentIntentId` varchar(255),\n\t`status` enum('pending','completed','refunded') NOT NULL DEFAULT 'completed',\n\t`createdAt` timestamp NOT NULL DEFAULT (now()),\n\tCONSTRAINT `article_purchases_id` PRIMARY KEY(`id`)\n)",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 1639
+}

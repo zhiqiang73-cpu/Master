@@ -5,31 +5,93 @@ import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
+import Login from "./pages/Login";
+import Articles from "./pages/Articles";
+import ArticleDetail from "./pages/ArticleDetail";
+import Bounties from "./pages/Bounties";
+import BountyDetail from "./pages/BountyDetail";
+import MasterProfile from "./pages/MasterProfile";
+import Pricing from "./pages/Pricing";
+import About from "./pages/About";
+import Contributor from "./pages/Contributor";
+import Dashboard from "./pages/Dashboard";
+import MasterDashboard from "./pages/MasterDashboard";
+import AdminLayout from "./pages/admin/AdminLayout";
+import AdminDashboard from "./pages/admin/AdminDashboard";
+import AdminUsers from "./pages/admin/AdminUsers";
+import AdminArticles from "./pages/admin/AdminArticles";
+import AdminBounties from "./pages/admin/AdminBounties";
+import AdminInviteCodes from "./pages/admin/AdminInviteCodes";
+import AdminAgents from "./pages/admin/AdminAgents";
 
 function Router() {
-  // make sure to consider if you need authentication for certain routes
   return (
     <Switch>
-      <Route path={"/"} component={Home} />
-      <Route path={"/404"} component={NotFound} />
-      {/* Final fallback route */}
+      <Route path="/" component={Home} />
+      <Route path="/login" component={Login} />
+      <Route path="/articles" component={Articles} />
+      <Route path="/article/:code" component={ArticleDetail} />
+      <Route path="/bounties" component={Bounties} />
+      <Route path="/bounty/:id" component={BountyDetail} />
+      <Route path="/master/:alias" component={MasterProfile} />
+      <Route path="/pricing" component={Pricing} />
+      <Route path="/about" component={About} />
+      <Route path="/contributor" component={Contributor} />
+      <Route path="/dashboard" component={Dashboard} />
+      <Route path="/master/dashboard" component={MasterDashboard} />
+      {/* Admin routes */}
+      <Route path="/admin">
+        {() => (
+          <AdminLayout>
+            <AdminDashboard />
+          </AdminLayout>
+        )}
+      </Route>
+      <Route path="/admin/users">
+        {() => (
+          <AdminLayout>
+            <AdminUsers />
+          </AdminLayout>
+        )}
+      </Route>
+      <Route path="/admin/articles">
+        {() => (
+          <AdminLayout>
+            <AdminArticles />
+          </AdminLayout>
+        )}
+      </Route>
+      <Route path="/admin/bounties">
+        {() => (
+          <AdminLayout>
+            <AdminBounties />
+          </AdminLayout>
+        )}
+      </Route>
+      <Route path="/admin/invite-codes">
+        {() => (
+          <AdminLayout>
+            <AdminInviteCodes />
+          </AdminLayout>
+        )}
+      </Route>
+      <Route path="/admin/agents">
+        {() => (
+          <AdminLayout>
+            <AdminAgents />
+          </AdminLayout>
+        )}
+      </Route>
+      <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>
   );
 }
 
-// NOTE: About Theme
-// - First choose a default theme according to your design style (dark or light bg), than change color palette in index.css
-//   to keep consistent foreground/background color across components
-// - If you want to make theme switchable, pass `switchable` ThemeProvider and use `useTheme` hook
-
 function App() {
   return (
     <ErrorBoundary>
-      <ThemeProvider
-        defaultTheme="light"
-        // switchable
-      >
+      <ThemeProvider defaultTheme="light">
         <TooltipProvider>
           <Toaster />
           <Router />

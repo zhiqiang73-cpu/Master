@@ -1,0 +1,9 @@
+{
+  "query": "CREATE TABLE `bounties` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`userId` int NOT NULL,\n\t`masterId` int,\n\t`articleId` int,\n\t`titleZh` text NOT NULL,\n\t`titleEn` text,\n\t`titleJa` text,\n\t`descriptionZh` text,\n\t`descriptionEn` text,\n\t`amount` decimal(10,2) NOT NULL,\n\t`status` enum('open','accepted','submitted','completed','disputed','cancelled') NOT NULL DEFAULT 'open',\n\t`stripePaymentIntentId` varchar(255),\n\t`deadline` timestamp,\n\t`acceptedAt` timestamp,\n\t`submittedAt` timestamp,\n\t`completedAt` timestamp,\n\t`memberRating` int,\n\t`memberFeedback` text,\n\t`adminNote` text,\n\t`createdAt` timestamp NOT NULL DEFAULT (now()),\n\t`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,\n\tCONSTRAINT `bounties_id` PRIMARY KEY(`id`)\n)",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 44k1efRsdsVyDeY.root --database 8CrHDvBhNX8k2hxK9ZrGb8 --execute CREATE TABLE `bounties` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`userId` int NOT NULL,\n\t`masterId` int,\n\t`articleId` int,\n\t`titleZh` text NOT NULL,\n\t`titleEn` text,\n\t`titleJa` text,\n\t`descriptionZh` text,\n\t`descriptionEn` text,\n\t`amount` decimal(10,2) NOT NULL,\n\t`status` enum('open','accepted','submitted','completed','disputed','cancelled') NOT NULL DEFAULT 'open',\n\t`stripePaymentIntentId` varchar(255),\n\t`deadline` timestamp,\n\t`acceptedAt` timestamp,\n\t`submittedAt` timestamp,\n\t`completedAt` timestamp,\n\t`memberRating` int,\n\t`memberFeedback` text,\n\t`adminNote` text,\n\t`createdAt` timestamp NOT NULL DEFAULT (now()),\n\t`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,\n\tCONSTRAINT `bounties_id` PRIMARY KEY(`id`)\n)",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 1561
+}

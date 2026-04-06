@@ -1,0 +1,18 @@
+{
+  "query": "CREATE TABLE `articles` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`code` varchar(32) NOT NULL,\n\t`masterId` int NOT NULL,\n\t`category` enum('industry','technical','market','policy','other') NOT NULL,\n\t`status` enum('draft','pending','approved','rejected','published') NOT NULL DEFAULT 'draft',\n\t`isFree` boolean NOT NULL DEFAULT false,\n\t`price` decimal(10,2) NOT NULL DEFAULT '0',\n\t`titleZh` text NOT NULL,\n\t`summaryZh` text,\n\t`contentZh` text,\n\t`titleEn` text,\n\t`summaryEn` text,\n\t`contentEn` text,\n\t`titleJa` text,\n\t`summaryJa` text,\n\t`contentJa` text,\n\t`tags` json DEFAULT ('[]'),\n\t`coverImageUrl` text,\n\t`readCount` int NOT NULL DEFAULT 0,\n\t`purchaseCount` int NOT NULL DEFAULT 0,\n\t`complianceScore` decimal(5,2),\n\t`complianceNote` text,\n\t`adminNote` text,\n\t`publishedAt` timestamp,\n\t`createdAt` timestamp NOT NULL DEFAULT (now()),\n\t`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,\n\tCONSTRAINT `articles_id` PRIMARY KEY(`id`),\n\tCONSTRAINT `articles_code_unique` UNIQUE(`code`)\n)",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 44k1efRsdsVyDeY.root --database 8CrHDvBhNX8k2hxK9ZrGb8 --execute CREATE TABLE `articles` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`code` varchar(32) NOT NULL,\n\t`masterId` int NOT NULL,\n\t`category` enum('industry','technical','market','policy','other') NOT NULL,\n\t`status` enum('draft','pending','approved','rejected','published') NOT NULL DEFAULT 'draft',\n\t`isFree` boolean NOT NULL DEFAULT false,\n\t`price` decimal(10,2) NOT NULL DEFAULT '0',\n\t`titleZh` text NOT NULL,\n\t`summaryZh` text,\n\t`contentZh` text,\n\t`titleEn` text,\n\t`summaryEn` text,\n\t`contentEn` text,\n\t`titleJa` text,\n\t`summaryJa` text,\n\t`contentJa` text,\n\t`tags` json DEFAULT ('[]'),\n\t`coverImageUrl` text,\n\t`readCount` int NOT NULL DEFAULT 0,\n\t`purchaseCount` int NOT NULL DEFAULT 0,\n\t`complianceScore` decimal(5,2),\n\t`complianceNote` text,\n\t`adminNote` text,\n\t`publishedAt` timestamp,\n\t`createdAt` timestamp NOT NULL DEFAULT (now()),\n\t`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,\n\tCONSTRAINT `articles_id` PRIMARY KEY(`id`),\n\tCONSTRAINT `articles_code_unique` UNIQUE(`code`)\n)",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1064 (42000) at line 1: You have an error in your SQL syntax; check the manual that corresponds to your TiDB version for the right syntax to use line 18 column 27 near \"'[]'),",
+    "\t`coverImageUrl` text,",
+    "\t`readCount` int NOT NULL DEFAULT 0,",
+    "\t`purchaseCount` int NOT NULL DEFAULT 0,",
+    "\t`complianceScore` decimal(5,2),",
+    "\t`complianceNote` text,",
+    "\t`adminNote` text,",
+    "\t`publishedAt` timestamp,",
+    "\t`createdAt` timestamp NOT NULL DEFAULT (now()),",
+    "\t`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,",
+    "\tCONSTRAINT `articles_id` PRIM"
+  ]
+}

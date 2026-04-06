@@ -1,0 +1,18 @@
+{
+  "query": "CREATE TABLE `agent_tasks` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`masterId` int NOT NULL,\n\t`createdBy` int NOT NULL,\n\t`taskType` enum('research','write','translate','compliance') NOT NULL,\n\t`status` enum('pending','running','completed','failed') NOT NULL DEFAULT 'pending',\n\t`instruction` text NOT NULL,\n\t`searchTopics` json DEFAULT ('[]'),\n\t`targetLangs` json DEFAULT ('[\"zh\",\"en\",\"ja\"]'),\n\t`resultArticleId` int,\n\t`rawResearch` text,\n\t`progressLog` json DEFAULT ('[]'),\n\t`errorMessage` text,\n\t`startedAt` timestamp,\n\t`completedAt` timestamp,\n\t`createdAt` timestamp NOT NULL DEFAULT (now()),\n\t`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,\n\tCONSTRAINT `agent_tasks_id` PRIMARY KEY(`id`)\n)",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 44k1efRsdsVyDeY.root --database 8CrHDvBhNX8k2hxK9ZrGb8 --execute CREATE TABLE `agent_tasks` (\n\t`id` int AUTO_INCREMENT NOT NULL,\n\t`masterId` int NOT NULL,\n\t`createdBy` int NOT NULL,\n\t`taskType` enum('research','write','translate','compliance') NOT NULL,\n\t`status` enum('pending','running','completed','failed') NOT NULL DEFAULT 'pending',\n\t`instruction` text NOT NULL,\n\t`searchTopics` json DEFAULT ('[]'),\n\t`targetLangs` json DEFAULT ('[\"zh\",\"en\",\"ja\"]'),\n\t`resultArticleId` int,\n\t`rawResearch` text,\n\t`progressLog` json DEFAULT ('[]'),\n\t`errorMessage` text,\n\t`startedAt` timestamp,\n\t`completedAt` timestamp,\n\t`createdAt` timestamp NOT NULL DEFAULT (now()),\n\t`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,\n\tCONSTRAINT `agent_tasks_id` PRIMARY KEY(`id`)\n)",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1064 (42000) at line 1: You have an error in your SQL syntax; check the manual that corresponds to your TiDB version for the right syntax to use line 8 column 35 near \"'[]'),",
+    "\t`targetLangs` json DEFAULT ('[\"zh\",\"en\",\"ja\"]'),",
+    "\t`resultArticleId` int,",
+    "\t`rawResearch` text,",
+    "\t`progressLog` json DEFAULT ('[]'),",
+    "\t`errorMessage` text,",
+    "\t`startedAt` timestamp,",
+    "\t`completedAt` timestamp,",
+    "\t`createdAt` timestamp NOT NULL DEFAULT (now()),",
+    "\t`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,",
+    "\tCONSTRAINT `agent_tasks_id` PR"
+  ]
+}
