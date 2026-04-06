@@ -58,6 +58,17 @@ export default function MasterDashboard() {
     tags: "",
   });
   const utils = trpc.useUtils();
+  const [showEditProfile, setShowEditProfile] = useState(false);
+  const [editProfileForm, setEditProfileForm] = useState({ displayName: "", bio: "", expertise: "" });
+
+  const updateProfileMutation = trpc.masters.updateProfile.useMutation({
+    onSuccess: () => {
+      toast.success("资料已更新");
+      setShowEditProfile(false);
+      utils.masters.myProfile.invalidate();
+    },
+    onError: (err) => toast.error(err.message),
+  });
 
   const { data: profile, isLoading: profileLoading } = trpc.masters.myProfile.useQuery(undefined, {
     enabled: isAuthenticated && (user?.role === "master" || user?.role === "admin"),
@@ -462,7 +473,15 @@ export default function MasterDashboard() {
                       <p className="text-sm text-foreground">{profile.bio ?? "暂无简介"}</p>
                     </div>
                     <div className="pt-2">
-                      <Button variant="outline" size="sm" className="text-xs">
+                      <Button variant="outline" size="sm" className="text-xs"
+                        onClick={() => {
+                          setEditProfileForm({
+                            displayName: profile.displayName ?? "",
+                            bio: profile.bio ?? "",
+                            expertise: ((profile.expertise as string[]) ?? []).join(", "),
+                          });
+                          setShowEditProfile(true);
+                        }}>
                         <Edit3 className="w-3.5 h-3.5 mr-1.5" />
                         编辑资料
                       </Button>
@@ -619,6 +638,64 @@ export default function MasterDashboard() {
               >
                 {createMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
                 保存草稿
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Profile Dialog */}
+      <Dialog open={showEditProfile} onOpenChange={setShowEditProfile}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Edit3 className="w-4 h-4 text-[var(--patina)]" />
+              编辑 Master 资料
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-2">
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1.5 block">显示名称</Label>
+              <Input
+                placeholder="您的名字"
+                value={editProfileForm.displayName}
+                onChange={e => setEditProfileForm(f => ({ ...f, displayName: e.target.value }))}
+              />
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1.5 block">个人简介</Label>
+              <Textarea
+                placeholder="介绍您的专业背景和研究方向..."
+                rows={3}
+                value={editProfileForm.bio}
+                onChange={e => setEditProfileForm(f => ({ ...f, bio: e.target.value }))}
+              />
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1.5 block">专业领域（逗号分隔）</Label>
+              <Input
+                placeholder="碳化硬, 先进封装, HBM..."
+                value={editProfileForm.expertise}
+                onChange={e => setEditProfileForm(f => ({ ...f, expertise: e.target.value }))}
+              />
+              <p className="text-xs text-muted-foreground mt-1">示例：台积电, 碳化硬, AI芯片, 先进封装</p>
+            </div>
+            <div className="flex justify-end gap-3 pt-2">
+              <Button variant="outline" onClick={() => setShowEditProfile(false)}>取消</Button>
+              <Button
+                className="bg-[var(--patina)] hover:bg-[var(--patina-dark)] text-white gap-1.5"
+                onClick={() => {
+                  const expertise = editProfileForm.expertise.split(",").map(t => t.trim()).filter(Boolean);
+                  updateProfileMutation.mutate({
+                    displayName: editProfileForm.displayName || undefined,
+                    bio: editProfileForm.bio || undefined,
+                    expertise: expertise.length > 0 ? expertise : undefined,
+                  });
+                }}
+                disabled={updateProfileMutation.isPending}
+              >
+                {updateProfileMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                保存修改
               </Button>
             </div>
           </div>

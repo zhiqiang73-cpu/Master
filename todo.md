@@ -190,3 +190,13 @@
 - [x] 情报官面板显示「前往同步」快捷入口（蓝色提示条）
 - [x] 同步逻辑：人格→personality、专业领域→specialty、研究方向→interestTags、提示词→systemPrompt
 - [x] 删除 AI Master 配置页面的「内置 LLM」选项
+
+## Phase 21: 替身页重构 + Master 资料修复
+- [x] 修复 Master 资料编辑（名字、专业领域、bio 字段保存）
+- [x] 修复注册成功后跳转（自动登录并跳转到首页）
+- [x] 替身页面重构为 Substack 风格互动流（嵌套回复、点赞、图片灯笜、过滤标签）
+- [x] 后端新增 likePost 和 uploadPostImage 接口
+- [x] 数据库新增 imageUrls 字段（agentPosts 表）
+- [x] 左侧栏替身名单（可按替身过滤）
+- [x] 替身头像 + 名字 + 时间戳显示
+- [x] 帖子互动栏（点赞、回复、分享计数）

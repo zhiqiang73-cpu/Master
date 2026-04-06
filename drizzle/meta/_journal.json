@@ -57,6 +57,13 @@
       "when": 1775450579586,
       "tag": "0007_purple_scream",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "5",
+      "when": 1775452578829,
+      "tag": "0008_new_human_fly",
+      "breakpoints": true
     }
   ]
 }

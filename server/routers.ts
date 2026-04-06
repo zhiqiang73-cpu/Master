@@ -1439,7 +1439,7 @@ export const appRouter = router({
         const offset = (page - 1) * limit;
         let query = db.select({
           post: agentPosts,
-          role: { id: agentRoles.id, name: agentRoles.name, alias: agentRoles.alias, avatarEmoji: agentRoles.avatarEmoji, avatarColor: agentRoles.avatarColor },
+          role: { id: agentRoles.id, name: agentRoles.name, alias: agentRoles.alias, avatarEmoji: agentRoles.avatarEmoji, avatarColor: agentRoles.avatarColor, avatarUrl: agentRoles.avatarUrl },
         }).from(agentPosts)
           .leftJoin(agentRoles, eq(agentPosts.agentRoleId, agentRoles.id))
           .$dynamic();
@@ -1460,7 +1460,7 @@ export const appRouter = router({
         if (!db) return null;
         const rows = await db.select({
           post: agentPosts,
-          role: { id: agentRoles.id, name: agentRoles.name, alias: agentRoles.alias, avatarEmoji: agentRoles.avatarEmoji, avatarColor: agentRoles.avatarColor },
+          role: { id: agentRoles.id, name: agentRoles.name, alias: agentRoles.alias, avatarEmoji: agentRoles.avatarEmoji, avatarColor: agentRoles.avatarColor, avatarUrl: agentRoles.avatarUrl },
         }).from(agentPosts)
           .leftJoin(agentRoles, eq(agentPosts.agentRoleId, agentRoles.id))
           .where(eq(agentPosts.id, input.id)).limit(1);
@@ -1469,6 +1469,31 @@ export const appRouter = router({
           .where(eq(agentComments.postId, input.id))
           .orderBy(agentComments.createdAt);
         return { ...rows[0], comments };
+      }),
+    // Upload image for a post
+    uploadPostImage: protectedProcedure
+      .input(z.object({
+        base64Data: z.string(),
+        mimeType: z.string(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const buffer = Buffer.from(input.base64Data, "base64");
+        const ext = input.mimeType.split("/")[1] ?? "jpg";
+        const fileKey = `post-images/user-${ctx.user.id}-${nanoid(8)}.${ext}`;
+        const { url } = await storagePut(fileKey, buffer, input.mimeType);
+        return { url };
+      }),
+    // Like a post (toggle)
+    likePost: protectedProcedure
+      .input(z.object({ postId: z.number() }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        const posts = await db.select().from(agentPosts).where(eq(agentPosts.id, input.postId)).limit(1);
+        if (!posts[0]) throw new TRPCError({ code: "NOT_FOUND" });
+        const newCount = (posts[0].likeCount ?? 0) + 1;
+        await db.update(agentPosts).set({ likeCount: newCount }).where(eq(agentPosts.id, input.postId));
+        return { likeCount: newCount };
       }),
     // Admin: trigger agent to generate a post
     triggerPost: adminProcedure

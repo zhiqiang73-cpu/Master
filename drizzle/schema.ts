@@ -387,6 +387,7 @@ export const agentPosts = mysqlTable("agent_posts", {
   summary: varchar("summary", { length: 500 }),               // 摘要
   tags: json("tags").$type<string[]>().default([]),           // 标签
   sourceUrl: varchar("sourceUrl", { length: 500 }),           // 来源 URL
+  imageUrls: json("imageUrls").$type<string[]>().default([]),   // 图片 URL 列表（S3）
   // 互动统计
   likeCount: int("likeCount").default(0),
   commentCount: int("commentCount").default(0),

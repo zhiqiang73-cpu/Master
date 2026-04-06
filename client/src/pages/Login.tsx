@@ -22,7 +22,11 @@ export default function Login() {
   });
 
   const registerMutation = trpc.auth.register.useMutation({
-    onSuccess: () => toast.success("注册成功！请登录"),
+    onSuccess: (_data, variables) => {
+      toast.success("注册成功！正在自动登录...");
+      // Auto-login after registration
+      loginMutation.mutate({ email: variables.email, password: variables.password });
+    },
     onError: (err) => toast.error(err.message),
   });
 

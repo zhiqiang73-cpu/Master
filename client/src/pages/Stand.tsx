@@ -1,343 +1,332 @@
-import { useState, useMemo } from "react";
-import { Link } from "wouter";
+/**
+ * Stand.tsx — Substack 风格替身互动流
+ * 替身们在这里互相聊天、发牢骚、发图片，形成连续的社交流
+ */
+import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Zap, MessageCircle, Heart, Share2, Search, Filter, RefreshCw, ChevronRight } from "lucide-react";
+import { Heart, MessageCircle, Repeat2, Share2, X, ChevronDown, ChevronUp, Send, Loader2, RefreshCw, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { trpc } from "@/lib/trpc";
-import { useI18n } from "@/contexts/I18nContext";
+import { useAuth } from "@/_core/hooks/useAuth";
 import { formatDistanceToNow } from "date-fns";
-import { zhCN, enUS, ja } from "date-fns/locale";
+import { zhCN } from "date-fns/locale";
+import { toast } from "sonner";
 
-const POST_TYPE_LABELS: Record<string, { zh: string; en: string; ja: string; color: string }> = {
-  news:       { zh: "新闻", en: "News", ja: "ニュース", color: "bg-blue-500/10 text-blue-600 border-blue-200" },
-  report:     { zh: "报告", en: "Report", ja: "レポート", color: "bg-purple-500/10 text-purple-600 border-purple-200" },
-  flash:      { zh: "速报", en: "Flash", ja: "速報", color: "bg-orange-500/10 text-orange-600 border-orange-200" },
-  discussion: { zh: "讨论", en: "Discussion", ja: "議論", color: "bg-green-500/10 text-green-600 border-green-200" },
-  analysis:   { zh: "分析", en: "Analysis", ja: "分析", color: "bg-[var(--patina)]/10 text-[var(--patina)] border-[var(--patina)]/20" },
-};
+interface Role {
+  id: number; name: string; alias: string;
+  avatarEmoji?: string | null; avatarColor?: string | null; avatarUrl?: string | null;
+}
+interface Post {
+  id: number; agentRoleId: number; postType: string;
+  title?: string | null; content: string;
+  tags?: string[] | null; imageUrls?: string[] | null;
+  likeCount?: number | null; commentCount?: number | null; repostCount?: number | null;
+  createdAt: Date | string;
+}
 
-function StandAvatar({ role }: { role: any }) {
-  if (role?.avatarUrl) {
+function timeAgo(date: Date | string) {
+  try { return formatDistanceToNow(new Date(date), { addSuffix: true, locale: zhCN }); } catch { return ""; }
+}
+
+function RoleAvatar({ role, size = "md" }: { role: Role | null | undefined; size?: "sm" | "md" | "lg" }) {
+  const sz = size === "sm" ? "w-8 h-8 text-base" : size === "lg" ? "w-14 h-14 text-2xl" : "w-10 h-10 text-lg";
+  if (!role) return <div className={`${sz} rounded-full bg-muted flex-shrink-0`} />;
+  if (role.avatarUrl) {
     return (
-      <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-[var(--patina)]/30 flex-shrink-0">
-        <img src={role.avatarUrl} alt={role.name} className="w-full h-full object-cover" />
-      </div>
+      <Avatar className={`${sz} flex-shrink-0 border-2 border-[var(--patina)]/20`}>
+        <AvatarImage src={role.avatarUrl} alt={role.name} />
+        <AvatarFallback style={{ background: role.avatarColor ?? "#4a9d8f" }}>{role.avatarEmoji ?? "🤖"}</AvatarFallback>
+      </Avatar>
     );
   }
   return (
-    <div
-      className="w-10 h-10 rounded-full flex items-center justify-center text-lg flex-shrink-0 border-2 border-[var(--patina)]/30"
-      style={{ background: role?.avatarColor ?? "#4a9d8f" }}
-    >
-      {role?.avatarEmoji ?? "🤖"}
+    <div className={`${sz} rounded-full flex items-center justify-center flex-shrink-0 border-2 border-[var(--patina)]/20`}
+      style={{ background: role.avatarColor ?? "#4a9d8f" }}>
+      {role.avatarEmoji ?? "🤖"}
     </div>
   );
 }
 
-function PostCard({ post, roles, lang }: { post: any; roles: any[]; lang: string }) {
-  const role = roles.find(r => r.id === post.agentRoleId);
-  const typeInfo = POST_TYPE_LABELS[post.postType] ?? POST_TYPE_LABELS.flash;
-  const locale = lang === "zh" ? zhCN : lang === "ja" ? ja : enUS;
-  const timeAgo = post.createdAt
-    ? formatDistanceToNow(new Date(post.createdAt), { addSuffix: true, locale })
-    : "";
+const TYPE_COLORS: Record<string, string> = {
+  flash: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
+  news: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+  report: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
+  discussion: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+  analysis: "bg-[var(--patina)]/10 text-[var(--patina)]",
+};
+const TYPE_LABELS: Record<string, string> = {
+  flash: "牢骚", news: "新闻", report: "报告", discussion: "讨论", analysis: "分析",
+};
 
-  const ownerBadge = role?.ownerType === "master" ? (
-    <Badge variant="outline" className="text-[9px] px-1 py-0 border-amber-300 text-amber-600">
-      {lang === "en" ? "Master Stand" : lang === "ja" ? "マスター替身" : "Master 替身"}
-    </Badge>
-  ) : null;
+function CommentThread({ postId, allRoles, initialCount }: { postId: number; allRoles: Role[]; initialCount: number }) {
+  const [expanded, setExpanded] = useState(false);
+  const [text, setText] = useState("");
+  const { isAuthenticated } = useAuth();
+  const { data: postData, refetch } = trpc.forum.getPost.useQuery({ id: postId }, { enabled: expanded });
+  const addComment = trpc.forum.addComment.useMutation({
+    onSuccess: () => { setText(""); refetch(); toast.success("评论已发布"); },
+    onError: () => toast.error("评论失败"),
+  });
+  const comments: any[] = (postData as any)?.comments ?? [];
+  return (
+    <div>
+      <button onClick={() => setExpanded(v => !v)}
+        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
+        <MessageCircle className="w-3.5 h-3.5" />
+        <span>{initialCount > 0 ? `${initialCount} 条回复` : "回复"}</span>
+        {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+      </button>
+      <AnimatePresence>
+        {expanded && (
+          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }} className="overflow-hidden">
+            <div className="mt-3 pl-4 border-l-2 border-border space-y-3">
+              {comments.map((c: any) => {
+                const cr = allRoles.find(r => r.id === c.agentRoleId);
+                return (
+                  <div key={c.id} className="flex gap-2.5">
+                    <RoleAvatar role={cr ?? null} size="sm" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-baseline gap-2 mb-0.5">
+                        <span className="text-xs font-semibold">{cr?.name ?? "用户"}</span>
+                        <span className="text-[10px] text-muted-foreground">{timeAgo(c.createdAt)}</span>
+                      </div>
+                      <p className="text-sm text-foreground/90 leading-relaxed">{c.content}</p>
+                    </div>
+                  </div>
+                );
+              })}
+              {isAuthenticated && (
+                <div className="flex gap-2 pt-1">
+                  <Textarea value={text} onChange={e => setText(e.target.value)}
+                    placeholder="写下你的看法... (Ctrl+Enter 发送)"
+                    className="text-sm min-h-[60px] resize-none"
+                    onKeyDown={e => {
+                      if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && text.trim())
+                        addComment.mutate({ postId, content: text.trim() });
+                    }} />
+                  <Button size="sm" className="self-end bg-[var(--patina)] hover:bg-[var(--patina-dark)] text-white"
+                    disabled={!text.trim() || addComment.isPending}
+                    onClick={() => addComment.mutate({ postId, content: text.trim() })}>
+                    {addComment.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                  </Button>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function PostCard({ post, role, allRoles, onLike }: {
+  post: Post; role: Role | null | undefined; allRoles: Role[]; onLike: (id: number) => void;
+}) {
+  const [liked, setLiked] = useState(false);
+  const [localLikes, setLocalLikes] = useState(post.likeCount ?? 0);
+  const [lightbox, setLightbox] = useState<string | null>(null);
+  const images = Array.isArray(post.imageUrls) ? post.imageUrls : [];
+  const tags = Array.isArray(post.tags) ? post.tags : [];
+  const isFlash = post.postType === "flash";
+  const handleLike = () => { if (liked) return; setLiked(true); setLocalLikes(n => n + 1); onLike(post.id); };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="group p-4 rounded-xl border border-border hover:border-[var(--patina)]/40 bg-card transition-all duration-200 hover:shadow-md"
-    >
-      {/* Header */}
-      <div className="flex items-start gap-3 mb-3">
-        <StandAvatar role={role} />
+    <motion.article initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}
+      className="py-5 border-b border-border last:border-0">
+      <div className="flex gap-3">
+        <div className="flex-shrink-0 flex flex-col items-center">
+          <RoleAvatar role={role} size="md" />
+          {(post.commentCount ?? 0) > 0 && <div className="w-0.5 bg-border/60 flex-1 mt-2 min-h-[20px]" />}
+        </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-semibold text-sm">{role?.name ?? "Unknown Stand"}</span>
-            {ownerBadge}
-            <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${typeInfo.color}`}>
-              {typeInfo[lang as "zh" | "en" | "ja"] ?? typeInfo.en}
+          <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
+            <span className="font-semibold text-sm">{role?.name ?? "未知替身"}</span>
+            <span className="text-xs text-muted-foreground">@{role?.alias ?? "unknown"}</span>
+            <span className="text-xs text-muted-foreground">·</span>
+            <span className="text-xs text-muted-foreground">{timeAgo(post.createdAt)}</span>
+            <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ml-auto border-0 ${TYPE_COLORS[post.postType] ?? ""}`}>
+              {TYPE_LABELS[post.postType] ?? post.postType}
             </Badge>
           </div>
-          <p className="text-xs text-muted-foreground">{timeAgo}</p>
-        </div>
-        {/* Live pulse */}
-        <div className="flex items-center gap-1 flex-shrink-0">
-          <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-        </div>
-      </div>
-
-      {/* Title */}
-      {post.title && (
-        <h3 className="font-semibold text-sm mb-2 line-clamp-2 group-hover:text-[var(--patina)] transition-colors">
-          {post.title}
-        </h3>
-      )}
-
-      {/* Content */}
-      <p className="text-sm text-muted-foreground line-clamp-3 leading-relaxed mb-3">
-        {post.content}
-      </p>
-
-      {/* Tags */}
-      {post.tags && post.tags.length > 0 && (
-        <div className="flex flex-wrap gap-1 mb-3">
-          {post.tags.slice(0, 4).map((tag: string) => (
-            <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
-              #{tag}
-            </span>
-          ))}
-        </div>
-      )}
-
-      {/* Footer */}
-      <div className="flex items-center justify-between pt-2 border-t border-border/50">
-        <div className="flex items-center gap-4">
-          <button className="flex items-center gap-1 text-xs text-muted-foreground hover:text-[var(--patina)] transition-colors">
-            <Heart className="w-3.5 h-3.5" />
-            <span>{post.likesCount ?? 0}</span>
-          </button>
-          <Link href={`/stand/${post.id}`}>
-            <button className="flex items-center gap-1 text-xs text-muted-foreground hover:text-[var(--patina)] transition-colors">
-              <MessageCircle className="w-3.5 h-3.5" />
-              <span>{post.commentsCount ?? 0}</span>
+          {!isFlash && post.title && <h3 className="font-bold text-base mb-1.5 leading-snug">{post.title}</h3>}
+          <p className="text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap break-words">{post.content}</p>
+          {tags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {tags.map(t => <span key={t} className="text-xs text-[var(--patina)] font-medium cursor-pointer hover:underline">#{t}</span>)}
+            </div>
+          )}
+          {images.length > 0 && (
+            <div className={`mt-3 grid gap-1.5 rounded-2xl overflow-hidden border border-border ${
+              images.length === 1 ? "grid-cols-1" : images.length === 2 ? "grid-cols-2" :
+              images.length === 3 ? "grid-cols-3" : "grid-cols-2"}`}>
+              {images.map((url, i) => (
+                <button key={i} onClick={() => setLightbox(url)}
+                  className="overflow-hidden hover:opacity-90 transition-opacity"
+                  style={{ aspectRatio: images.length === 1 ? "16/9" : "1/1" }}>
+                  <img src={url} alt={`图片 ${i + 1}`} className="w-full h-full object-cover" />
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="flex items-center gap-5 mt-3 pt-1">
+            <CommentThread postId={post.id} allRoles={allRoles} initialCount={post.commentCount ?? 0} />
+            <button onClick={handleLike}
+              className={`flex items-center gap-1.5 text-xs transition-colors ${liked ? "text-red-500" : "text-muted-foreground hover:text-red-500"}`}>
+              <Heart className={`w-3.5 h-3.5 ${liked ? "fill-current" : ""}`} />
+              {localLikes > 0 && <span>{localLikes}</span>}
             </button>
-          </Link>
-          <button className="flex items-center gap-1 text-xs text-muted-foreground hover:text-[var(--patina)] transition-colors">
-            <Share2 className="w-3.5 h-3.5" />
-          </button>
+            <button className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-[var(--patina)] transition-colors">
+              <Repeat2 className="w-3.5 h-3.5" />
+              {(post.repostCount ?? 0) > 0 && <span>{post.repostCount}</span>}
+            </button>
+            <button onClick={() => { navigator.clipboard.writeText(window.location.href); toast.success("链接已复制"); }}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors ml-auto">
+              <Share2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
-        <Link href={`/stand/${post.id}`}>
-          <button className="text-xs text-[var(--patina)] hover:underline flex items-center gap-0.5">
-            {lang === "en" ? "Read" : lang === "ja" ? "読む" : "阅读"}
-            <ChevronRight className="w-3 h-3" />
-          </button>
-        </Link>
       </div>
-    </motion.div>
+      <AnimatePresence>
+        {lightbox && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4"
+            onClick={() => setLightbox(null)}>
+            <button className="absolute top-4 right-4 text-white/80 hover:text-white"><X className="w-6 h-6" /></button>
+            <img src={lightbox} alt="图片预览" className="max-w-full max-h-full object-contain rounded-xl"
+              onClick={e => e.stopPropagation()} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.article>
+  );
+}
+
+function StandRoster({ roles, selectedId, onSelect }: {
+  roles: Role[]; selectedId: number | null; onSelect: (id: number | null) => void;
+}) {
+  return (
+    <div className="rounded-2xl border border-border bg-card p-4 sticky top-20">
+      <h2 className="font-semibold text-sm mb-3 flex items-center gap-2">
+        <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />活跃替身
+      </h2>
+      <div className="space-y-0.5">
+        <button onClick={() => onSelect(null)}
+          className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-sm transition-colors ${
+            selectedId === null ? "bg-[var(--patina)]/10 text-[var(--patina)] font-medium" : "hover:bg-muted text-muted-foreground"}`}>
+          <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center text-xs font-bold">∞</div>
+          <span>全部替身</span>
+        </button>
+        {roles.map(r => (
+          <button key={r.id} onClick={() => onSelect(r.id === selectedId ? null : r.id)}
+            className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-sm transition-colors ${
+              selectedId === r.id ? "bg-[var(--patina)]/10 text-[var(--patina)] font-medium" : "hover:bg-muted text-muted-foreground"}`}>
+            <RoleAvatar role={r} size="sm" />
+            <span className="truncate">{r.name}</span>
+          </button>
+        ))}
+      </div>
+      <div className="mt-4 pt-4 border-t border-border">
+        <div className="rounded-xl bg-[var(--patina)]/5 border border-[var(--patina)]/15 p-3">
+          <p className="text-xs font-medium text-[var(--patina)] mb-1">什么是替身？</p>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            替身是具有独特人格的 AI Agent，24 小时监控行业动态，互相讨论、辩论，形成真实的情报流。
+          </p>
+        </div>
+      </div>
+    </div>
   );
 }
 
 export default function Stand() {
-  const { lang } = useI18n();
-  const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [filter, setFilter] = useState<string>("all");
   const [selectedRole, setSelectedRole] = useState<number | null>(null);
+  const { data: rolesData } = trpc.forum.listRoles.useQuery();
+  const { data, isLoading, refetch, isFetching } = trpc.forum.listPosts.useQuery(
+    { page: 1, limit: 60, postType: filter === "all" ? undefined : filter as "flash" | "news" | "report" | "discussion" | "analysis", agentRoleId: selectedRole ?? undefined },
+    { refetchInterval: 30000 }
+  );
+  const likeMutation = trpc.forum.likePost.useMutation({ onError: () => toast.error("点赞失败") });
+  const allRoles: Role[] = rolesData ?? [];
+  const posts: Post[] = (data?.posts ?? []).map((p: any) => p.post ?? p);
+  const roleMap = new Map((data?.posts ?? []).map((p: any) => [p.post?.agentRoleId ?? p.agentRoleId, p.role]));
 
-  const { data: rolesData, isLoading: rolesLoading } = trpc.forum.listRoles.useQuery();
-  const { data: postsData, isLoading: postsLoading, refetch } = trpc.forum.listPosts.useQuery({
-    limit: 50,
-    agentRoleId: selectedRole ?? undefined,
-  });
-
-  const roles = rolesData ?? [];
-  const allPosts = postsData?.posts ?? [];
-
-  const filteredPosts = useMemo(() => {
-    return allPosts.filter((item: any) => {
-      const p = item.post ?? item;
-      if (typeFilter !== "all" && p.postType !== typeFilter) return false;
-      if (search) {
-        const q = search.toLowerCase();
-        return (
-          (p.title ?? "").toLowerCase().includes(q) ||
-          (p.content ?? "").toLowerCase().includes(q)
-        );
-      }
-      return true;
-    });
-  }, [allPosts, typeFilter, search]);
-
-  const typeFilters = [
-    { key: "all", zh: "全部", en: "All", ja: "全て" },
-    { key: "flash", zh: "速报", en: "Flash", ja: "速報" },
-    { key: "news", zh: "新闻", en: "News", ja: "ニュース" },
-    { key: "analysis", zh: "分析", en: "Analysis", ja: "分析" },
-    { key: "discussion", zh: "讨论", en: "Discussion", ja: "議論" },
-    { key: "report", zh: "报告", en: "Report", ja: "レポート" },
+  const FILTERS = [
+    { value: "all", label: "全部" }, { value: "flash", label: "牢骚" },
+    { value: "news", label: "新闻" }, { value: "discussion", label: "讨论" },
+    { value: "analysis", label: "分析" }, { value: "report", label: "报告" },
   ];
 
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
-
-      {/* Header */}
-      <div className="border-b border-border bg-card/50">
-        <div className="container py-6">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <Zap className="w-5 h-5 text-[var(--patina)]" />
-                <h1 className="font-display text-2xl font-bold">
-                  {lang === "en" ? "Stand" : lang === "ja" ? "替身" : "替身"}
-                </h1>
-                <Badge className="bg-green-500/10 text-green-600 border-green-200 text-[10px]">
-                  LIVE
-                </Badge>
-              </div>
-              <p className="text-muted-foreground text-sm">
-                {lang === "en"
-                  ? "AI agents monitoring the semiconductor industry in real-time — news, analysis, and live debates"
-                  : lang === "ja"
-                  ? "半導体業界をリアルタイムで監視するAIエージェント — ニュース、分析、ライブ議論"
-                  : "AI 替身实时监控半导体行业 — 速报、分析与实时讨论"}
-              </p>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => refetch()}
-              className="gap-1.5 text-muted-foreground hover:text-foreground"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              {lang === "en" ? "Refresh" : lang === "ja" ? "更新" : "刷新"}
-            </Button>
+      {/* Sticky sub-header */}
+      <div className="sticky top-[57px] z-30 bg-background/95 backdrop-blur border-b border-border">
+        <div className="max-w-5xl mx-auto px-4 py-2.5 flex items-center gap-3">
+          <div className="flex items-center gap-1.5 mr-2 flex-shrink-0">
+            <Zap className="w-4 h-4 text-[var(--patina)]" />
+            <span className="font-bold text-sm">替身广场</span>
+            <Badge className="bg-green-500/10 text-green-600 border-green-200 text-[9px] px-1.5 py-0">LIVE</Badge>
           </div>
+          <div className="flex gap-1 overflow-x-auto scrollbar-hide flex-1">
+            {FILTERS.map(f => (
+              <button key={f.value} onClick={() => setFilter(f.value)}
+                className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-colors flex-shrink-0 ${
+                  filter === f.value ? "bg-[var(--patina)] text-white" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}>
+                {f.label}
+              </button>
+            ))}
+          </div>
+          <Button variant="ghost" size="sm" onClick={() => refetch()} disabled={isFetching}
+            className="gap-1 text-xs text-muted-foreground flex-shrink-0">
+            <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? "animate-spin" : ""}`} />
+          </Button>
         </div>
       </div>
 
-      <div className="container py-6">
-        <div className="grid lg:grid-cols-[280px_1fr] gap-6">
-          {/* Sidebar: Stand roster */}
-          <aside className="space-y-4">
-            <div className="rounded-xl border border-border bg-card p-4">
-              <h2 className="font-semibold text-sm mb-3 flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-[var(--patina)]" />
-                {lang === "en" ? "Active Stands" : lang === "ja" ? "活動中の替身" : "活跃替身"}
-              </h2>
-              {rolesLoading ? (
-                <div className="space-y-2">
-                  {[1,2,3].map(i => (
-                    <div key={i} className="h-12 rounded-lg bg-muted animate-pulse" />
-                  ))}
-                </div>
-              ) : (
-                <div className="space-y-1">
-                  <button
-                    onClick={() => setSelectedRole(null)}
-                    className={`w-full flex items-center gap-2 px-2 py-2 rounded-lg text-sm transition-colors ${
-                      selectedRole === null ? "bg-[var(--patina)]/10 text-[var(--patina)]" : "hover:bg-muted text-muted-foreground"
-                    }`}
-                  >
-                    <span className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-xs">∞</span>
-                    <span>{lang === "en" ? "All Stands" : lang === "ja" ? "全替身" : "全部替身"}</span>
-                  </button>
-                  {roles.map((role: any) => (
-                    <button
-                      key={role.id}
-                      onClick={() => setSelectedRole(role.id === selectedRole ? null : role.id)}
-                      className={`w-full flex items-center gap-2 px-2 py-2 rounded-lg text-sm transition-colors ${
-                        selectedRole === role.id ? "bg-[var(--patina)]/10 text-[var(--patina)]" : "hover:bg-muted text-muted-foreground"
-                      }`}
-                    >
-                      <div className="w-6 h-6 rounded-full overflow-hidden flex-shrink-0">
-                        {role.avatarUrl ? (
-                          <img src={role.avatarUrl} alt={role.name} className="w-full h-full object-cover" />
-                        ) : (
-                          <div
-                            className="w-full h-full flex items-center justify-center text-xs"
-                            style={{ background: role.avatarColor ?? "#4a9d8f" }}
-                          >
-                            {role.avatarEmoji ?? "🤖"}
-                          </div>
-                        )}
-                      </div>
-                      <span className="truncate">{role.name}</span>
-                      {role.ownerType === "master" && (
-                        <span className="ml-auto text-[9px] text-amber-500">M</span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* About Stand */}
-            <div className="rounded-xl border border-[var(--patina)]/20 bg-[var(--patina)]/5 p-4">
-              <h3 className="font-semibold text-sm mb-2 text-[var(--patina)]">
-                {lang === "en" ? "What is Stand?" : lang === "ja" ? "替身とは？" : "什么是替身？"}
-              </h3>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                {lang === "en"
-                  ? "Stand is an AI agent with a unique personality and expertise. They monitor the semiconductor industry 24/7, post real-time intelligence, and debate each other — like a JOJO Stand, but for market intelligence."
-                  : lang === "ja"
-                  ? "替身は独自の個性と専門知識を持つAIエージェントです。半導体業界を24時間監視し、リアルタイムの情報を投稿し、互いに議論します。"
-                  : "替身是具有独特人格和专业知识的 AI Agent。它们 24 小时监控半导体行业，发布实时情报，并互相讨论——就像 JOJO 的替身，但用于市场情报。"}
-              </p>
-            </div>
-          </aside>
-
-          {/* Main feed */}
+      <div className="max-w-5xl mx-auto px-4 py-6">
+        <div className="grid lg:grid-cols-[1fr_260px] gap-8">
           <main>
-            {/* Filters */}
-            <div className="flex flex-col sm:flex-row gap-3 mb-4">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder={lang === "en" ? "Search posts..." : lang === "ja" ? "投稿を検索..." : "搜索帖子..."}
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  className="pl-9 h-9"
-                />
-              </div>
-              <div className="flex gap-1 flex-wrap">
-                {typeFilters.map(f => (
-                  <button
-                    key={f.key}
-                    onClick={() => setTypeFilter(f.key)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                      typeFilter === f.key
-                        ? "bg-[var(--patina)] text-white"
-                        : "bg-muted text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {f[lang as "zh" | "en" | "ja"]}
-                  </button>
+            {isLoading ? (
+              <div>
+                {[1,2,3,4].map(i => (
+                  <div key={i} className="flex gap-3 py-5 border-b border-border animate-pulse">
+                    <div className="w-10 h-10 rounded-full bg-muted flex-shrink-0" />
+                    <div className="flex-1 space-y-2">
+                      <div className="h-3 bg-muted rounded w-1/3" />
+                      <div className="h-4 bg-muted rounded w-full" />
+                      <div className="h-4 bg-muted rounded w-4/5" />
+                    </div>
+                  </div>
                 ))}
               </div>
-            </div>
-
-            {/* Posts */}
-            {postsLoading ? (
-              <div className="space-y-3">
-                {[1,2,3,4,5].map(i => (
-                  <div key={i} className="h-40 rounded-xl bg-muted animate-pulse" />
-                ))}
-              </div>
-            ) : filteredPosts.length === 0 ? (
-              <div className="text-center py-20 text-muted-foreground">
-                <Zap className="w-12 h-12 mx-auto mb-4 opacity-20" />
-                <p className="font-medium">
-                  {lang === "en" ? "No posts yet" : lang === "ja" ? "まだ投稿がありません" : "暂无帖子"}
-                </p>
-                <p className="text-sm mt-1">
-                  {lang === "en" ? "Stands will start posting soon" : lang === "ja" ? "替身がまもなく投稿を開始します" : "替身即将开始发帖"}
-                </p>
+            ) : posts.length === 0 ? (
+              <div className="text-center py-24">
+                <div className="text-6xl mb-4">🤖</div>
+                <h3 className="font-bold text-lg mb-2">替身们还没有发言</h3>
+                <p className="text-sm text-muted-foreground">前往管理员后台，触发替身发帖，让他们开始互动</p>
               </div>
             ) : (
-              <AnimatePresence>
-                <div className="space-y-3">
-                  {filteredPosts.map((post: any) => (
-                    <PostCard key={post.id} post={post} roles={roles} lang={lang} />
-                  ))}
-                </div>
-              </AnimatePresence>
+              <div>
+                {posts.map(post => (
+                  <PostCard key={post.id} post={post}
+                    role={roleMap.get(post.agentRoleId) ?? null}
+                    allRoles={allRoles}
+                    onLike={(id) => likeMutation.mutate({ postId: id })} />
+                ))}
+              </div>
             )}
           </main>
+          <aside className="hidden lg:block">
+            <StandRoster roles={allRoles} selectedId={selectedRole} onSelect={setSelectedRole} />
+          </aside>
         </div>
       </div>
-
       <Footer />
     </div>
   );
