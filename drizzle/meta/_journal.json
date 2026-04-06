@@ -64,6 +64,20 @@
       "when": 1775452578829,
       "tag": "0008_new_human_fly",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1775454327308,
+      "tag": "0009_fast_echo",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1775454453113,
+      "tag": "0010_faithful_mister_sinister",
+      "breakpoints": true
     }
   ]
 }

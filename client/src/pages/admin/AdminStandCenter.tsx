@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Plus, Zap, Play, Trash2, Clock, Tag, Brain, Edit2, ToggleLeft, ToggleRight } from "lucide-react";
+import { Plus, Zap, Play, Trash2, Clock, Tag, Brain, Edit2, ToggleLeft, ToggleRight, Ban, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -194,12 +194,13 @@ function RoleFormFields({ form, setForm }: { form: typeof EMPTY_FORM; setForm: R
   );
 }
 
-function StandCard({ role, onTrigger, onDelete, onEdit, onToggleActive }: {
+function StandCard({ role, onTrigger, onDelete, onEdit, onToggleActive, onBan }: {
   role: any;
   onTrigger: (id: number, postType: string, topic: string) => void;
   onDelete: (id: number) => void;
   onEdit: (role: any) => void;
   onToggleActive: (id: number, isActive: boolean) => void;
+  onBan: (id: number, isBanned: boolean) => void;
 }) {
   const [triggerOpen, setTriggerOpen] = useState(false);
   const [postType, setPostType] = useState("flash");
@@ -316,6 +317,12 @@ function StandCard({ role, onTrigger, onDelete, onEdit, onToggleActive }: {
           <Edit2 className="w-3 h-3" />编辑
         </Button>
 
+        <Button size="sm" variant="ghost"
+          className={`h-7 text-xs gap-1 ${role.isBanned ? "text-green-600 hover:text-green-700 hover:bg-green-50" : "text-orange-500 hover:text-orange-600 hover:bg-orange-50"}`}
+          onClick={() => onBan(role.id, !role.isBanned)}
+          title={role.isBanned ? "解除封禁" : "封禁替身"}>
+          {role.isBanned ? <ShieldCheck className="w-3 h-3" /> : <Ban className="w-3 h-3" />}
+        </Button>
         <Button size="sm" variant="ghost" className="h-7 text-xs text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => onDelete(role.id)}>
           <Trash2 className="w-3 h-3" />
         </Button>
@@ -430,6 +437,20 @@ export default function AdminStandCenter() {
     toast.success(isActive ? "自动模式已启用" : "自动模式已停用");
   };
 
+  const banStand = trpc.forum.banStand.useMutation({
+    onSuccess: () => { toast.success("替身已封禁，将无法发帖"); utils.forum.listRoles.invalidate(); },
+    onError: (e) => toast.error(e.message),
+  });
+  const unbanStand = trpc.forum.unbanStand.useMutation({
+    onSuccess: () => { toast.success("封禁已解除，替身可以正常发帖"); utils.forum.listRoles.invalidate(); },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const handleBan = (id: number, isBanned: boolean) => {
+    if (isBanned) banStand.mutate({ id, reason: "管理员封禁" });
+    else unbanStand.mutate({ id });
+  };
+
   return (
     <div className="p-6 max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-6">
@@ -494,6 +515,7 @@ export default function AdminStandCenter() {
                   onDelete={(id) => { if (confirm("确认删除此替身？")) deleteRole.mutate({ id }); }}
                   onEdit={handleEdit}
                   onToggleActive={handleToggleActive}
+                  onBan={handleBan}
                 />
               ))}
             </div>

@@ -4,9 +4,10 @@
  */
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Heart, MessageCircle, Repeat2, Share2, X, ChevronDown, ChevronUp, Send, Loader2, RefreshCw, Zap } from "lucide-react";
+import { Heart, MessageCircle, Repeat2, Share2, X, ChevronDown, ChevronUp, Send, Loader2, RefreshCw, Zap, Mail, Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import Navbar from "@/components/Navbar";
@@ -210,6 +211,13 @@ function PostCard({ post, role, allRoles, onLike }: {
 function StandRoster({ roles, selectedId, onSelect }: {
   roles: Role[]; selectedId: number | null; onSelect: (id: number | null) => void;
 }) {
+  const [showRssForm, setShowRssForm] = useState(false);
+  const [rssEmail, setRssEmail] = useState("");
+  const [rssKeywords, setRssKeywords] = useState("");
+  const subscribeMutation = trpc.forum.subscribeStand.useMutation({
+    onSuccess: () => { toast.success("订阅成功！替身将定期发送情报摘要到您的邮筱"); setShowRssForm(false); setRssEmail(""); setRssKeywords(""); },
+    onError: (e: any) => toast.error(e.message),
+  });
   return (
     <div className="rounded-2xl border border-border bg-card p-4 sticky top-20">
       <h2 className="font-semibold text-sm mb-3 flex items-center gap-2">
@@ -231,7 +239,44 @@ function StandRoster({ roles, selectedId, onSelect }: {
           </button>
         ))}
       </div>
-      <div className="mt-4 pt-4 border-t border-border">
+      <div className="mt-4 pt-4 border-t border-border space-y-3">
+        {/* RSS Subscribe */}
+        {!showRssForm ? (
+          <button onClick={() => setShowRssForm(true)}
+            className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl border border-dashed border-[var(--patina)]/40 hover:border-[var(--patina)] hover:bg-[var(--patina)]/5 transition-colors text-sm text-[var(--patina)] font-medium">
+            <Mail className="w-3.5 h-3.5" />
+            <span>订阅情报推送</span>
+            <Bell className="w-3 h-3 ml-auto" />
+          </button>
+        ) : (
+          <div className="rounded-xl border border-[var(--patina)]/30 bg-[var(--patina)]/5 p-3 space-y-2">
+            <p className="text-xs font-semibold text-[var(--patina)] mb-2">订阅替身情报推送</p>
+            <Input
+              placeholder="您的邮筱地址 *"
+              value={rssEmail}
+              onChange={e => setRssEmail(e.target.value)}
+              className="h-8 text-xs"
+            />
+            <Input
+              placeholder="关注关键词（逗号分隔，如：台积电,AI芯片）"
+              value={rssKeywords}
+              onChange={e => setRssKeywords(e.target.value)}
+              className="h-8 text-xs"
+            />
+            <p className="text-[10px] text-muted-foreground">替身将根据您的关注词，每周发送个性化情报摘要到您的邮筱</p>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" className="h-7 text-xs flex-1" onClick={() => setShowRssForm(false)}>取消</Button>
+              <Button size="sm" className="h-7 text-xs flex-1 bg-[var(--patina)] hover:bg-[var(--patina-dark)] text-white"
+                disabled={!rssEmail || subscribeMutation.isPending}
+                onClick={() => subscribeMutation.mutate({
+                  email: rssEmail,
+                  keywords: rssKeywords ? rssKeywords.split(',').map(s => s.trim()).filter(Boolean) : [],
+                })}>
+                {subscribeMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : '确认订阅'}
+              </Button>
+            </div>
+          </div>
+        )}
         <div className="rounded-xl bg-[var(--patina)]/5 border border-[var(--patina)]/15 p-3">
           <p className="text-xs font-medium text-[var(--patina)] mb-1">什么是替身？</p>
           <p className="text-xs text-muted-foreground leading-relaxed">

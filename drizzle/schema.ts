@@ -359,6 +359,15 @@ export const agentRoles = mysqlTable("agent_roles", {
   triggerKeywords: json("triggerKeywords").$type<string[]>(),  // 关键词触发列表
   specialty: text("specialty"),                                             // 专业领域描述（Master 注册时填写）
   isActive: boolean("isActive").default(true).notNull(),
+  // 封禁状态
+  isBanned: boolean("isBanned").default(false).notNull(),
+  bannedReason: text("bannedReason"),                         // 封禁原因
+  bannedAt: timestamp("bannedAt"),                            // 封禁时间
+  // 创建者类型（决定替身权限和来源）
+  creatorType: mysqlEnum("creatorType", ["admin", "master", "user"]).default("admin").notNull(),
+  ownerUserId: int("ownerUserId"),                            // 普通用户创建时指向 users.id
+  // 每日发帖上限
+  dailyPostLimit: int("dailyPostLimit").default(10),          // 每天最多发帖数（0=不限）
   // 统计
   totalPosts: int("totalPosts").default(0),
   lastPostedAt: timestamp("lastPostedAt"),
@@ -368,6 +377,21 @@ export const agentRoles = mysqlTable("agent_roles", {
 });
 export type AgentRole = typeof agentRoles.$inferSelect;
 export type InsertAgentRole = typeof agentRoles.$inferInsert;
+
+/** 替身情报订阅（用户订阅某个替身的定期情报推送） */
+export const standSubscriptions = mysqlTable("stand_subscriptions", {
+  id: int("id").autoincrement().primaryKey(),
+  agentRoleId: int("agentRoleId").notNull(),          // 订阅的替身 ID
+  email: varchar("email", { length: 255 }).notNull(), // 接收推送的邮筱
+  keywords: json("keywords").$type<string[]>(),       // 用户关注的关键词（空则全推）
+  frequency: mysqlEnum("frequency", ["daily", "weekly", "realtime"]).default("daily").notNull(),
+  isActive: boolean("isActive").default(true).notNull(),
+  lastSentAt: timestamp("lastSentAt"),                // 最后发送时间
+  userId: int("userId"),                              // 登录用户的 userId（可为空，支持匹名订阅）
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type StandSubscription = typeof standSubscriptions.$inferSelect;
+export type InsertStandSubscription = typeof standSubscriptions.$inferInsert;
 
 /** Agent 帖子（论坛帖子，类似推特/论坛混合） */
 export const agentPosts = mysqlTable("agent_posts", {

@@ -58,7 +58,7 @@ import {
 } from "./db";
 import { z } from "zod";
 import { nanoid } from "nanoid";
-import { masters, users, smartContracts, contentModerationLogs, aiMasterConfigs, agentRoles, agentPosts, agentComments, agentTaskLogs } from "../drizzle/schema";
+import { masters, users, smartContracts, contentModerationLogs, aiMasterConfigs, agentRoles, agentPosts, agentComments, agentTaskLogs, standSubscriptions } from "../drizzle/schema";
 import { storagePut } from "./storage";
 import { eq, and } from "drizzle-orm";
 
@@ -1725,6 +1725,199 @@ export const appRouter = router({
         if (!db) return [];
         return db.select().from(agentTaskLogs).orderBy(agentTaskLogs.createdAt).limit(input?.limit ?? 50);
       }),
+
+    // Admin: ban/unban a stand
+    banStand: adminProcedure
+      .input(z.object({ id: z.number(), reason: z.string().optional() }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        await db.update(agentRoles).set({
+          isBanned: true,
+          bannedReason: input.reason ?? "违反言论规则",
+          bannedAt: new Date(),
+          isActive: false,
+        } as any).where(eq(agentRoles.id, input.id));
+        return { success: true };
+      }),
+
+    unbanStand: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        await db.update(agentRoles).set({
+          isBanned: false,
+          bannedReason: null,
+          bannedAt: null,
+          isActive: true,
+        } as any).where(eq(agentRoles.id, input.id));
+        return { success: true };
+      }),
+
+    // User: create their own stand
+    createUserStand: protectedProcedure
+      .input(z.object({
+        name: z.string().min(2).max(50),
+        alias: z.string().min(2).max(30).regex(/^[a-z0-9-]+$/),
+        bio: z.string().max(500).optional(),
+        personality: z.string().max(1000).optional(),
+        personalityTags: z.array(z.string()).max(5).optional(),
+        interestTags: z.array(z.string()).max(10).optional(),
+        expertise: z.array(z.string()).max(5).optional(),
+        postFrequency: z.string().default("0 9 * * *"),
+        dailyPostLimit: z.number().min(1).max(10).default(5),
+        modelProvider: z.enum(["qwen", "glm", "minimax", "openai", "anthropic", "custom"]).default("qwen"),
+        apiKey: z.string().optional(),
+        modelName: z.string().optional(),
+        avatarEmoji: z.string().optional(),
+        avatarColor: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        // Check alias uniqueness
+        const existing = await db.select({ id: agentRoles.id }).from(agentRoles)
+          .where(eq(agentRoles.alias, input.alias)).limit(1);
+        if (existing.length > 0) throw new TRPCError({ code: "CONFLICT", message: "别名已被占用" });
+        // Count user's existing stands (max 3 for free users)
+        const myStands = await db.select({ id: agentRoles.id }).from(agentRoles)
+          .where(eq((agentRoles as any).ownerUserId, ctx.user.id));
+        if (myStands.length >= 3) throw new TRPCError({ code: "FORBIDDEN", message: "免费用户最多创建 3 个替身" });
+
+        const [result] = await db.insert(agentRoles).values({
+          name: input.name,
+          alias: input.alias,
+          bio: input.bio,
+          personality: input.personality,
+          personalityTags: input.personalityTags ?? [],
+          interestTags: input.interestTags ?? [],
+          expertise: input.expertise ?? [],
+          postFrequency: input.postFrequency,
+          ownerType: "platform",
+          scope: ["stand"],
+          modelProvider_role: input.modelProvider as any,
+          apiKey: input.apiKey,
+          modelName: input.modelName,
+          avatarEmoji: input.avatarEmoji ?? "🤖",
+          avatarColor: input.avatarColor ?? "#6366f1",
+          createdBy: ctx.user.id,
+          creatorType: "user" as any,
+          ownerUserId: ctx.user.id,
+          dailyPostLimit: input.dailyPostLimit,
+          isActive: true,
+          isBanned: false,
+        } as any);
+        return { success: true, id: (result as any).insertId };
+      }),
+
+    // User: list their own stands
+    listUserStands: protectedProcedure.query(async ({ ctx }) => {
+      const db = await getDb();
+      if (!db) return [];
+      return db.select().from(agentRoles)
+        .where(eq((agentRoles as any).ownerUserId, ctx.user.id))
+        .orderBy(agentRoles.createdAt);
+    }),
+
+    // User: update their own stand
+    updateUserStand: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        name: z.string().min(2).max(50).optional(),
+        bio: z.string().max(500).optional(),
+        personality: z.string().max(1000).optional(),
+        personalityTags: z.array(z.string()).max(5).optional(),
+        interestTags: z.array(z.string()).max(10).optional(),
+        expertise: z.array(z.string()).max(5).optional(),
+        postFrequency: z.string().optional(),
+        dailyPostLimit: z.number().min(1).max(10).optional(),
+        isActive: z.boolean().optional(),
+        apiKey: z.string().optional(),
+        modelName: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        const [stand] = await db.select().from(agentRoles).where(eq(agentRoles.id, input.id)).limit(1);
+        if (!stand) throw new TRPCError({ code: "NOT_FOUND" });
+        if ((stand as any).ownerUserId !== ctx.user.id && ctx.user.role !== "admin")
+          throw new TRPCError({ code: "FORBIDDEN" });
+        const { id, ...updates } = input;
+        await db.update(agentRoles).set(updates as any).where(eq(agentRoles.id, id));
+        return { success: true };
+      }),
+
+    // User: delete their own stand
+    deleteUserStand: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        const [stand] = await db.select().from(agentRoles).where(eq(agentRoles.id, input.id)).limit(1);
+        if (!stand) throw new TRPCError({ code: "NOT_FOUND" });
+        if ((stand as any).ownerUserId !== ctx.user.id && ctx.user.role !== "admin")
+          throw new TRPCError({ code: "FORBIDDEN" });
+        await db.update(agentRoles).set({ isActive: false } as any).where(eq(agentRoles.id, input.id));
+        return { success: true };
+      }),
+
+    // Public: subscribe to a stand's intelligence digest
+    subscribeStand: publicProcedure
+      .input(z.object({
+        agentRoleId: z.number().optional(), // optional: subscribe to all stands
+        email: z.string().email(),
+        keywords: z.array(z.string()).max(10).optional(),
+        frequency: z.enum(["daily", "weekly", "realtime"]).default("daily"),
+        userId: z.number().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        // Check if already subscribed (agentRoleId=0 means subscribe to all)
+        const roleId = input.agentRoleId ?? 0;
+        const existing = await db.select({ id: standSubscriptions.id }).from(standSubscriptions)
+          .where(and(eq(standSubscriptions.agentRoleId, roleId), eq(standSubscriptions.email, input.email)))
+          .limit(1);
+        if (existing.length > 0) {
+          // Reactivate if inactive
+          await db.update(standSubscriptions).set({ isActive: true, keywords: input.keywords ?? [], frequency: input.frequency })
+            .where(eq(standSubscriptions.id, existing[0].id));
+          return { success: true, message: "订阅已更新" };
+        }
+        await db.insert(standSubscriptions).values({
+          agentRoleId: roleId,
+          email: input.email,
+          keywords: input.keywords ?? [],
+          frequency: input.frequency,
+          userId: input.userId,
+          isActive: true,
+        });
+        return { success: true, message: "订阅成功！情报摘要将发送到您的邮筱" };
+      }),
+
+    // Public: unsubscribe from a stand
+    unsubscribeStand: publicProcedure
+      .input(z.object({ agentRoleId: z.number(), email: z.string().email() }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        await db.update(standSubscriptions).set({ isActive: false })
+          .where(and(eq(standSubscriptions.agentRoleId, input.agentRoleId), eq(standSubscriptions.email, input.email)));
+        return { success: true };
+      }),
+
+    // Admin: get subscription count per stand
+    standSubscriptionStats: adminProcedure.query(async () => {
+      const db = await getDb();
+      if (!db) return [];
+      const subs = await db.select().from(standSubscriptions).where(eq(standSubscriptions.isActive, true));
+      const stats: Record<number, number> = {};
+      for (const s of subs) {
+        stats[s.agentRoleId] = (stats[s.agentRoleId] ?? 0) + 1;
+      }
+      return Object.entries(stats).map(([id, count]) => ({ agentRoleId: Number(id), count }));
+    }),
   }),
 });
 // ─── Forum Agent Runner ───────────────────────────────────────────────────────
