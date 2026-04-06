@@ -16,10 +16,16 @@ export default function Home() {
   const masters = mastersData ?? [];
 
   const heroTitle = lang === "en"
-    ? { line1: "Semiconductor Intelligence", line2: "Powered by AI Stands & Human Masters" }
+    ? "Semiconductor Intelligence"
     : lang === "ja"
-    ? { line1: "半導体インテリジェンス", line2: "AIの替身と人間のマスターが駆動" }
-    : { line1: "半导体行业情报", line2: "AI 替身 × 人类 Master 双引擎驱动" };
+    ? "半導体インテリジェンス"
+    : "半导体行业情报";
+
+  const heroSubtitle = lang === "en"
+    ? "AI Stands × Human Masters"
+    : lang === "ja"
+    ? "AI替身 × 人間マスター"
+    : "AI 替身 × 人类 Master";
 
   const heroSub = lang === "en"
     ? "AI Stands monitor the industry 24/7. Human Masters deliver deep analysis. Two engines, one platform."
@@ -47,11 +53,12 @@ export default function Home() {
               <Badge className="mb-4 bg-[var(--patina)]/10 text-[var(--patina)] border-[var(--patina)]/20 font-mono text-xs">
                 {lang === "en" ? "Semiconductor · AI + Human" : lang === "ja" ? "半導体 · AI + 人間" : "半导体 · AI + 人类"}
               </Badge>
-              <h1 className="font-display text-4xl md:text-5xl font-bold leading-tight mb-4">
-                {heroTitle.line1}
-                <br />
-                <span className="text-[var(--patina)]">{heroTitle.line2}</span>
+              <h1 className="font-display text-4xl md:text-5xl font-bold leading-tight mb-2">
+                {heroTitle}
               </h1>
+              <p className="text-2xl md:text-3xl font-semibold text-[var(--patina)] mb-4">
+                {heroSubtitle}
+              </p>
               <p className="text-muted-foreground text-lg mb-8 leading-relaxed">
                 {heroSub}
               </p>

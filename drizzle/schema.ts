@@ -348,6 +348,10 @@ export const agentRoles = mysqlTable("agent_roles", {
   systemPrompt: text("systemPrompt"),  // 个性化提示词
   postTypes: json("postTypes").$type<string[]>().default(["news", "report", "comment"]),
   postFrequency: varchar("postFrequency", { length: 50 }).default("0 9 * * *"), // cron
+  // 拟人化标签系统
+  personalityTags: json("personalityTags").$type<string[]>().default([]),  // 性格标签（如：犊利、悲观主义、技术乐观派）
+  interestTags: json("interestTags").$type<string[]>().default([]),       // 关注点标签（如：台积电、EDA工具、出口管制）
+  replyProbability: int("replyProbability").default(70),                   // 对相关话题的回复概率(0-100)
   isActive: boolean("isActive").default(true).notNull(),
   // 统计
   totalPosts: int("totalPosts").default(0),

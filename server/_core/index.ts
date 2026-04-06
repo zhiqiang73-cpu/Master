@@ -7,6 +7,10 @@ import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
+import { initStandScheduler } from "../standEngine";
+import { getDb } from "../db";
+import { agentRoles } from "../../drizzle/schema";
+import { eq } from "drizzle-orm";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -60,6 +64,23 @@ async function startServer() {
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
   });
+
+  // 初始化替身 Cron 调度器（延迟 3 秒等待数据库就绪）
+  setTimeout(async () => {
+    try {
+      await initStandScheduler(async (roleId) => {
+        const db = await getDb();
+        if (!db) return;
+        const [role] = await db.select().from(agentRoles).where(eq(agentRoles.id, roleId));
+        if (!role) return;
+        // 使用导出的调度器专用函数
+        const { runForumAgentFromScheduler } = await import("../routers");
+        await runForumAgentFromScheduler(role as any);
+      });
+    } catch (err) {
+      console.error("[Server] Failed to init stand scheduler:", err);
+    }
+  }, 3000);
 }
 
 startServer().catch(console.error);

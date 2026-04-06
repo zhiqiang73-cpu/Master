@@ -1,4 +1,5 @@
 import { COOKIE_NAME } from "@shared/const";
+import { generateTweet, triggerEventDrivenComments, initStandScheduler, scheduleStand, unscheduleStand } from "./standEngine";
 import { TRPCError } from "@trpc/server";
 import bcrypt from "bcryptjs";
 import { getSessionCookieOptions } from "./_core/cookies";
@@ -1278,18 +1279,34 @@ export const appRouter = router({
         systemPrompt: z.string().optional(),
         postTypes: z.array(z.string()).optional(),
         postFrequency: z.string().optional(),
+        personalityTags: z.array(z.string()).optional(),
+        interestTags: z.array(z.string()).optional(),
+        replyProbability: z.number().min(0).max(100).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
         const db = await getDb();
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
         const { modelProvider, ...rest } = input;
-        await db.insert(agentRoles).values({
+        const inserted = await db.insert(agentRoles).values({
           ...rest,
           modelProvider_role: modelProvider ?? "builtin",
           expertise: rest.expertise ?? [],
           postTypes: rest.postTypes ?? ["news", "report", "flash"],
+          personalityTags: rest.personalityTags ?? [],
+          interestTags: rest.interestTags ?? [],
+          replyProbability: rest.replyProbability ?? 70,
           createdBy: ctx.user.id,
         } as any);
+        // 启动 Cron 调度（如果配置了发帖频率）
+        if (rest.postFrequency) {
+          const [newRole] = await db.select().from(agentRoles).where(eq(agentRoles.alias, rest.alias));
+          if (newRole) {
+            scheduleStand(newRole as any, async (roleId) => {
+              const [r] = await db.select().from(agentRoles).where(eq(agentRoles.id, roleId));
+              if (r) await runForumAgentAsync({ ...r, modelProvider_role: (r as any).modelProvider_role ?? "builtin" }, "flash", "", "zh");
+            });
+          }
+        }
         return { success: true };
       }),
     updateRole: adminProcedure
@@ -1309,6 +1326,9 @@ export const appRouter = router({
         isActive: z.boolean().optional(),
         avatarEmoji: z.string().optional(),
         avatarColor: z.string().optional(),
+        personalityTags: z.array(z.string()).optional(),
+        interestTags: z.array(z.string()).optional(),
+        replyProbability: z.number().min(0).max(100).optional(),
       }))
       .mutation(async ({ input }) => {
         const db = await getDb();
@@ -1317,6 +1337,20 @@ export const appRouter = router({
         const updateData: Record<string, unknown> = { ...rest };
         if (modelProvider) updateData.modelProvider_role = modelProvider;
         await db.update(agentRoles).set(updateData as any).where(eq(agentRoles.id, id));
+        // 更新 Cron 调度
+        if (rest.postFrequency !== undefined || rest.isActive !== undefined) {
+          const [updatedRole] = await db.select().from(agentRoles).where(eq(agentRoles.id, id));
+          if (updatedRole) {
+            if (updatedRole.isActive && updatedRole.postFrequency) {
+              scheduleStand(updatedRole as any, async (roleId) => {
+                const [r] = await db.select().from(agentRoles).where(eq(agentRoles.id, roleId));
+                if (r) await runForumAgentAsync({ ...r, modelProvider_role: (r as any).modelProvider_role ?? "builtin" }, "flash", "", "zh");
+              });
+            } else {
+              unscheduleStand(id);
+            }
+          }
+        }
         return { success: true };
       }),
     deleteRole: adminProcedure
@@ -1447,6 +1481,10 @@ export const appRouter = router({
         personality: z.string().optional(),
         specialty: z.string().optional(),
         expertise: z.array(z.string()).optional(),
+        personalityTags: z.array(z.string()).optional(),
+        interestTags: z.array(z.string()).optional(),
+        postFrequency: z.string().optional(),
+        replyProbability: z.number().min(0).max(100).optional(),
         modelProvider: z.enum(["builtin", "qwen", "glm", "minimax", "openai", "anthropic", "custom"]).optional(),
         apiKey: z.string().optional(),
         systemPrompt: z.string().optional(),
@@ -1482,6 +1520,10 @@ export const appRouter = router({
           personality: input.personality ?? null,
           specialty: input.specialty ?? null,
           expertise: input.expertise ?? [],
+          personalityTags: input.personalityTags ?? [],
+          interestTags: input.interestTags ?? [],
+          postFrequency: input.postFrequency ?? null,
+          replyProbability: input.replyProbability ?? 70,
           modelProvider_role: input.modelProvider ?? "builtin",
           apiKey: input.apiKey ?? null,
           systemPrompt: input.systemPrompt ?? null,
@@ -1518,7 +1560,7 @@ export const appRouter = router({
 });
 // ─── Forum Agent Runner ───────────────────────────────────────────────────────
 async function runForumAgentAsync(
-  role: { id: number; name: string; personality: string | null; expertise: unknown; modelProvider_role: string; apiKey: string | null; modelName: string | null },
+  role: { id: number; name: string; personality: string | null; expertise: unknown; modelProvider_role: string; apiKey: string | null; modelName: string | null; personalityTags?: string[] | null; interestTags?: string[] | null; systemPrompt?: string | null },
   postType: string,
   topic: string,
   lang: string
@@ -1526,37 +1568,99 @@ async function runForumAgentAsync(
   const db = await getDb();
   if (!db) return;
   const expertiseArr = Array.isArray(role.expertise) ? role.expertise : [];
-  const typeLabels: Record<string, string> = { news: "新闻速递", report: "深度报告", flash: "短消息", discussion: "观点讨论", analysis: "数据分析" };
-  const systemPrompt = role.personality ||
-    `你是 ${role.name}，一位半导体行业专家，专长：${expertiseArr.join("、")}。你在一个行业论坛上发帖，风格专业但不失个性。`;
-  const topicHint = topic ? `主题：${topic}` : `请自选一个当前半导体行业的热点话题`;
-  const typeGuide = postType === "flash"
-    ? "请写一条100-200字的短消息，类似推特，直接表达观点，可以带话题标签。"
-    : postType === "report"
-    ? "请写一篇500-1000字的深度报告，有标题、分析和结论。"
-    : postType === "news"
-    ? "请写一条200-400字的行业新闻，有标题、事件概述和影响分析。"
-    : "请写一篇300-600字的观点文章，有标题和论点。";
-  const response = await invokeLLM({
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: `${topicHint}\n\n${typeGuide}\n\n请以JSON格式返回：{"title": "标题（flash类型可为null）", "content": "正文", "summary": "摘要（50字以内）", "tags": ["标签1", "标签2"]}` },
-    ],
-    response_format: { type: "json_schema", json_schema: { name: "forum_post", strict: true, schema: { type: "object", properties: { title: { type: ["string", "null"] }, content: { type: "string" }, summary: { type: "string" }, tags: { type: "array", items: { type: "string" } } }, required: ["title", "content", "summary", "tags"], additionalProperties: false } } },
-  });
-  const raw = response?.choices?.[0]?.message?.content;
-  if (!raw) return;
-  const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
-  await db.insert(agentPosts).values({
+  const personalityTags = Array.isArray((role as any).personalityTags) ? (role as any).personalityTags : [];
+  const interestTags = Array.isArray((role as any).interestTags) ? (role as any).interestTags : [];
+
+  let title: string | null = null;
+  let content: string;
+  let summary: string;
+  let tags: string[];
+
+  if (postType === "flash" || postType === "discussion") {
+    // 使用 Stand Engine 的 Twitter 风格推文生成
+    const standRole = {
+      id: role.id,
+      name: role.name,
+      alias: "",
+      avatarEmoji: "",
+      avatarColor: "",
+      avatarUrl: null,
+      personality: role.personality,
+      bio: null,
+      expertise: expertiseArr,
+      personalityTags,
+      interestTags,
+      replyProbability: 70,
+      modelProvider: role.modelProvider_role,
+      apiKey: role.apiKey,
+      systemPrompt: (role as any).systemPrompt ?? null,
+      postFrequency: null,
+      isActive: true,
+    };
+    const topicForTweet = topic || (interestTags.length > 0 ? interestTags[Math.floor(Math.random() * interestTags.length)] : "半导体行业最新动态");
+    const tweet = await generateTweet(standRole, topicForTweet, postType);
+    content = tweet.content;
+    tags = tweet.hashtags;
+    summary = content.slice(0, 80);
+    title = null;
+  } else {
+    // 长文类型：使用 JSON 结构化输出
+    const systemPrompt = role.personality ||
+      `你是 ${role.name}，一位半导体行业专家，专长：${expertiseArr.join("、")}。你在一个行业论坛上发帖，风格专业但不失个性。`;
+    const topicHint = topic ? `主题：${topic}` : `请自选一个当前半导体行业的热点话题`;
+    const typeGuide = postType === "report"
+      ? "请写一篇500-1000字的深度报告，有标题、分析和结论。"
+      : postType === "news"
+      ? "请写一条200-400字的行业新闻，有标题、事件概述和影响分析。"
+      : "请写一篇300-600字的观点文章，有标题和论点。";
+    const response = await invokeLLM({
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: `${topicHint}\n\n${typeGuide}\n\n请以JSON格式返回：{"title": "标题", "content": "正文", "summary": "摘要（50字以内）", "tags": ["标签1", "标签2"]}` },
+      ],
+      response_format: { type: "json_schema", json_schema: { name: "forum_post", strict: true, schema: { type: "object", properties: { title: { type: ["string", "null"] }, content: { type: "string" }, summary: { type: "string" }, tags: { type: "array", items: { type: "string" } } }, required: ["title", "content", "summary", "tags"], additionalProperties: false } } },
+    });
+    const raw = response?.choices?.[0]?.message?.content;
+    if (!raw) return;
+    const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+    title = parsed.title;
+    content = parsed.content;
+    summary = parsed.summary;
+    tags = parsed.tags;
+  }
+
+  const insertResult = await db.insert(agentPosts).values({
     agentRoleId: role.id,
     postType: postType as any,
-    title: parsed.title,
-    content: parsed.content,
-    summary: parsed.summary,
-    tags: parsed.tags,
+    title,
+    content,
+    summary,
+    tags,
     postStatus: "published",
   } as any);
-  await db.update(agentRoles).set({ totalPosts: agentRoles.totalPosts, lastPostedAt: new Date() } as any).where(eq(agentRoles.id, role.id));
+
+  await db.update(agentRoles).set({ lastPostedAt: new Date() } as any).where(eq(agentRoles.id, role.id));
+
+  // 触发事件驱动评论（延迟 5-30 分钟后其他替身自动回复）
+  try {
+    const [newPost] = await db.select().from(agentPosts)
+      .where(eq(agentPosts.agentRoleId, role.id))
+      .orderBy(agentPosts.createdAt as any)
+      .limit(1);
+    // 获取最新发布的帖子 id
+    const allPosts = await db.select().from(agentPosts)
+      .where(eq(agentPosts.agentRoleId, role.id));
+    const latestPost = allPosts.sort((a: any, b: any) => {
+      const ta = a.createdAt instanceof Date ? a.createdAt.getTime() : new Date(a.createdAt).getTime();
+      const tb = b.createdAt instanceof Date ? b.createdAt.getTime() : new Date(b.createdAt).getTime();
+      return tb - ta;
+    })[0];
+    if (latestPost) {
+      triggerEventDrivenComments(latestPost.id, role.id, tags).catch(console.error);
+    }
+  } catch (err) {
+    console.error("[runForumAgentAsync] Failed to trigger event-driven comments:", err);
+  }
 }
 async function runForumCommentAsync(
   role: { id: number; name: string; personality: string | null; expertise: unknown },
@@ -1784,3 +1888,26 @@ ${topics.join("\n")}
 }
 
 export type AppRouter = typeof appRouter;
+
+/**
+ * 供服务器启动时 Cron 调度器调用的包装函数
+ */
+export async function runForumAgentFromScheduler(role: {
+  id: number;
+  name: string;
+  personality: string | null;
+  expertise: unknown;
+  modelProvider_role?: string;
+  apiKey: string | null;
+  modelName: string | null;
+  personalityTags?: string[] | null;
+  interestTags?: string[] | null;
+  systemPrompt?: string | null;
+}): Promise<void> {
+  await runForumAgentAsync(
+    { ...role, modelProvider_role: (role as any).modelProvider_role ?? "builtin" },
+    "flash",
+    "",
+    "zh"
+  );
+}

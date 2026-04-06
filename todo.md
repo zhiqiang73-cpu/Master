@@ -128,3 +128,42 @@
 - [x] 首页移除替身大卡片，改为简洁双引擎介绍布局
 - [x] 替身板块（/stand）替身以圆形小头像展示
 - [x] 全站替身头像统一为圆形样式
+
+## Phase 16: 替身功能完善
+- [ ] 首页标题压缩为一行（不换行）
+- [ ] 删除替身板块 JOJO 相关描述文字
+- [ ] 替身互评：替身中心触发评论功能
+- [ ] 替身定时发帖：cron 调度配置
+- [ ] JOJO 头像 AI 生成：创建替身时自动生成
+
+## Phase 17: 替身拟人化系统
+- [ ] 数据库：agentRoles 添加 personalityTags、interestTags、cronSchedule 字段
+- [ ] 数据库：agentPosts 添加 hashtags 字段
+- [ ] 后端：标签相互吸引算法（重叠度计算 + 触发概率）
+- [ ] 后端：Cron 定时发推调度器（node-cron）
+- [ ] 后端：事件驱动评论触发（发推后自动触发其他替身评论）
+- [ ] 后端：Twitter 风格推文生成（140-280字，带#标签，性格化语气）
+- [ ] 后端：回复时引用原推内容
+- [ ] 前端：替身创建表单添加性格标签/关注点标签/Cron配置
+- [ ] 前端：替身板块 Twitter 风格推文流
+- [ ] 前端：嵌套回复链展示（最多3层）
+- [ ] 修复首页标题换行问题
+- [ ] 删除替身板块 JOJO 描述文字
+
+## Phase 18: Stand Engine 完整集成（当前阶段）
+- [x] standEngine.ts：标签匹配算法（calcAttractionScore + shouldReply）
+- [x] standEngine.ts：Twitter 风格推文生成（generateTweet + generateReply）
+- [x] standEngine.ts：事件驱动评论触发（triggerEventDrivenComments，延迟 5-30 分钟）
+- [x] standEngine.ts：Cron 调度器（scheduleStand + unscheduleStand + initStandScheduler）
+- [x] server/_core/index.ts：服务器启动时自动初始化所有活跃替身的 Cron 调度
+- [x] server/routers.ts：createRole/updateRole/createMasterStand 支持 personalityTags/interestTags/postFrequency/replyProbability
+- [x] server/routers.ts：runForumAgentAsync 集成 generateTweet（flash/discussion 类型）
+- [x] server/routers.ts：runForumAgentAsync 发帖后自动触发 triggerEventDrivenComments
+- [x] server/routers.ts：导出 runForumAgentFromScheduler 供 Cron 调度器调用
+- [x] AdminStandCenter.tsx：性格标签输入（TagInput 组件 + 预设快选）
+- [x] AdminStandCenter.tsx：关注点标签输入（TagInput 组件 + 预设快选）
+- [x] AdminStandCenter.tsx：发帖频率 Cron 下拉选择（预设 + 自定义）
+- [x] AdminStandCenter.tsx：回复概率配置（0-100%）
+- [x] server/standEngine.test.ts：4 个单元测试（标签匹配算法验证）
+- [x] 22 个 Vitest 测试全部通过（新增 4 个 Stand Engine 测试）
+- [x] TypeScript 零错误

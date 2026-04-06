@@ -43,6 +43,13 @@
       "when": 1775447425161,
       "tag": "0005_pink_kang",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1775448250884,
+      "tag": "0006_fantastic_darkhawk",
+      "breakpoints": true
     }
   ]
 }
