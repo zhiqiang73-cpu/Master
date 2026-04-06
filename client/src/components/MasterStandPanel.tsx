@@ -51,7 +51,7 @@ export default function MasterStandPanel() {
 
   const createStand = trpc.forum.createMasterStand.useMutation({
     onSuccess: (data) => {
-      toast.success("替身创建成功！" + (data.avatarUrl ? " JOJO 头像已生成 🎨" : ""));
+      toast.success("替身创建成功！" + (data.avatarUrl ? " AI 头像已生成 🎨" : ""));
       setShowCreate(false);
       resetForm();
       utils.forum.listMyStands.invalidate();
@@ -223,12 +223,12 @@ export default function MasterStandPanel() {
           </DialogHeader>
 
           <div className="space-y-4 mt-2">
-            {/* JOJO Avatar Toggle */}
+            {/* AI Avatar Toggle */}
             <div className="rounded-lg border border-[var(--patina)]/30 bg-[var(--patina)]/5 p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium">🎨 AI 生成 JOJO 风格头像</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">自动生成独特的 JoJo 奇妙冒险风格替身头像（约需 15 秒）</p>
+                  <p className="text-sm font-medium">🎨 AI 生成个性头像</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">自动生成独特的 AI 替身头像（约需 15 秒）</p>
                 </div>
                 <Button
                   type="button"
