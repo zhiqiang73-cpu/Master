@@ -81,6 +81,28 @@ async function startServer() {
       console.error("[Server] Failed to init stand scheduler:", err);
     }
   }, 3000);
+
+  // 初始化 RSS 情报推送调度器（每天早上 8:00 运行）
+  setTimeout(async () => {
+    const scheduleNextRun = () => {
+      const now = new Date();
+      const next8am = new Date(now);
+      next8am.setHours(8, 0, 0, 0);
+      if (next8am <= now) next8am.setDate(next8am.getDate() + 1);
+      const msUntil = next8am.getTime() - now.getTime();
+      console.log(`[RSS] Daily digest scheduled for ${next8am.toLocaleString("zh-CN")} (in ${Math.round(msUntil / 60000)} min)`);
+      setTimeout(async () => {
+        try {
+          const { runAllRssDigests } = await import("../routers");
+          await runAllRssDigests();
+        } catch (err) {
+          console.error("[RSS] Daily digest failed:", err);
+        }
+        scheduleNextRun(); // reschedule for next day
+      }, msUntil);
+    };
+    scheduleNextRun();
+  }, 5000);
 }
 
 startServer().catch(console.error);

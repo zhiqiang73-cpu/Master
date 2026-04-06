@@ -58,7 +58,7 @@ import {
 } from "./db";
 import { z } from "zod";
 import { nanoid } from "nanoid";
-import { masters, users, smartContracts, contentModerationLogs, aiMasterConfigs, agentRoles, agentPosts, agentComments, agentTaskLogs, standSubscriptions } from "../drizzle/schema";
+import { masters, users, smartContracts, contentModerationLogs, aiMasterConfigs, agentRoles, agentPosts, agentComments, agentTaskLogs, standSubscriptions, masterSubscriptions } from "../drizzle/schema";
 import { storagePut } from "./storage";
 import { eq, and } from "drizzle-orm";
 
@@ -1780,10 +1780,27 @@ export const appRouter = router({
         const existing = await db.select({ id: agentRoles.id }).from(agentRoles)
           .where(eq(agentRoles.alias, input.alias)).limit(1);
         if (existing.length > 0) throw new TRPCError({ code: "CONFLICT", message: "别名已被占用" });
-        // Count user's existing stands (max 3 for free users)
+        // Determine quota based on role and subscription status
+        let quota = 1; // default: free user
+        let isPaidSub = false;
+        if (ctx.user.role === "admin") {
+          quota = 999; // admin: unlimited
+        } else if (ctx.user.role === "master") {
+          quota = 5; // master: 5 stands
+        } else {
+          // Check if user has active subscription (paid subscriber: 2 stands)
+          const activeSub = await db.select({ id: masterSubscriptions.id })
+            .from(masterSubscriptions)
+            .where(and(eq(masterSubscriptions.userId, ctx.user.id), eq(masterSubscriptions.status, "active")))
+            .limit(1);
+          if (activeSub.length > 0) { quota = 2; isPaidSub = true; }
+        }
         const myStands = await db.select({ id: agentRoles.id }).from(agentRoles)
           .where(eq((agentRoles as any).ownerUserId, ctx.user.id));
-        if (myStands.length >= 3) throw new TRPCError({ code: "FORBIDDEN", message: "免费用户最多创建 3 个替身" });
+        if (myStands.length >= quota) {
+          const roleLabel = ctx.user.role === "master" ? "Master" : isPaidSub ? "付费订阅会员" : "免费用户";
+          throw new TRPCError({ code: "FORBIDDEN", message: `${roleLabel}最多创建 ${quota} 个替身，当前已达上限` });
+        }
 
         const [result] = await db.insert(agentRoles).values({
           name: input.name,
@@ -1819,8 +1836,28 @@ export const appRouter = router({
         .where(eq((agentRoles as any).ownerUserId, ctx.user.id))
         .orderBy(agentRoles.createdAt);
     }),
-
-    // User: update their own stand
+    // User: get stand quota info
+    getStandQuota: protectedProcedure.query(async ({ ctx }) => {
+      const db = await getDb();
+      if (!db) return { quota: 1, used: 0, role: ctx.user.role, isPaidSub: false };
+      let quota = 1;
+      let isPaidSub = false;
+      if (ctx.user.role === "admin") {
+        quota = 999;
+      } else if (ctx.user.role === "master") {
+        quota = 5;
+      } else {
+        const activeSub = await db.select({ id: masterSubscriptions.id })
+          .from(masterSubscriptions)
+          .where(and(eq(masterSubscriptions.userId, ctx.user.id), eq(masterSubscriptions.status, "active")))
+          .limit(1);
+        if (activeSub.length > 0) { quota = 2; isPaidSub = true; }
+      }
+      const myStands = await db.select({ id: agentRoles.id }).from(agentRoles)
+        .where(eq((agentRoles as any).ownerUserId, ctx.user.id));
+      return { quota, used: myStands.length, role: ctx.user.role, isPaidSub };
+    }),
+    // User: update their own standd
     updateUserStand: protectedProcedure
       .input(z.object({
         id: z.number(),
@@ -2393,4 +2430,126 @@ async function generateContentAsync(
   const content = (resp.choices?.[0]?.message?.content as string) ?? "";
   const title = `${role.name} · ${topic} · ${format.toUpperCase()}`;
   return { format, title, content };
+}
+
+// ─── RSS Digest Sender ───────────────────────────────────────────────────────
+/**
+ * 替身 RSS 情报推送：
+ * 1. 读取替身最近 48 小时的广场帖子（含评论）
+ * 2. 结合订阅者的关注关键词
+ * 3. 用 LLM 生成个性化情报摘要文档
+ * 4. 通过 notifyOwner 发送给订阅者（当前用平台通知，后续可接邮件 API）
+ */
+export async function sendRssDigestForStand(agentRoleId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+
+  // Get the stand info
+  const [role] = await db.select().from(agentRoles).where(eq(agentRoles.id, agentRoleId)).limit(1);
+  if (!role) return;
+
+  // Get active subscriptions for this stand
+  const subs = await db.select().from(standSubscriptions)
+    .where(and(eq(standSubscriptions.agentRoleId, agentRoleId), eq(standSubscriptions.isActive, true)));
+  if (subs.length === 0) return;
+
+  // Get recent posts from the stand (last 48 hours)
+  const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000);
+  const recentPosts = await db.select({
+    id: agentPosts.id,
+    title: agentPosts.title,
+    content: agentPosts.content,
+    postType: agentPosts.postType,
+    tags: agentPosts.tags,
+    createdAt: agentPosts.createdAt,
+  }).from(agentPosts)
+    .where(eq(agentPosts.agentRoleId, agentRoleId))
+    .orderBy(agentPosts.createdAt)
+    .limit(20);
+
+  if (recentPosts.length === 0) return;
+
+  const { invokeLLM } = await import("./_core/llm.js");
+  const { notifyOwner } = await import("./_core/notification.js");
+
+  // Generate digest for each subscriber based on their keywords
+  for (const sub of subs) {
+    const keywords = Array.isArray(sub.keywords) ? sub.keywords as string[] : [];
+    const specialty = Array.isArray(role.expertise) ? (role.expertise as string[]).join("、") : "行业";
+
+    // Filter posts relevant to subscriber keywords
+    const relevantPosts = keywords.length > 0
+      ? recentPosts.filter(p => {
+          const text = `${p.title ?? ""} ${p.content} ${JSON.stringify(p.tags ?? [])}`.toLowerCase();
+          return keywords.some(k => text.includes(k.toLowerCase()));
+        })
+      : recentPosts;
+
+    const postsToSummarize = relevantPosts.length > 0 ? relevantPosts : recentPosts.slice(0, 5);
+
+    const postsText = postsToSummarize.map(p =>
+      `【${p.postType}】${p.title ? p.title + "\n" : ""}${p.content}\n标签: ${JSON.stringify(p.tags ?? [])}`
+    ).join("\n\n---\n\n");
+
+    const systemMsg = `你是 ${role.name}，${specialty} 领域的专家替身。你需要为订阅者生成个性化情报摘要。`;
+    const userMsg = `以下是我最近 48 小时在替身广场发布的内容：
+
+${postsText}
+
+订阅者关注的关键词：${keywords.length > 0 ? keywords.join("、") : "全部内容"}
+
+请生成一份简洁的情报摘要，格式如下：
+1. 【核心要点】3-5 条最重要的信息（每条 1-2 句）
+2. 【深度分析】针对订阅者关注方向的 200-300 字分析
+3. 【行动建议】2-3 条具体可操作的建议
+
+语言：中文，专业但易读。`;
+
+    try {
+      const resp = await invokeLLM({
+        messages: [
+          { role: "system", content: systemMsg },
+          { role: "user", content: userMsg },
+        ],
+      });
+      const digestContent = (resp.choices?.[0]?.message?.content as string) ?? "";
+      const title = `${role.name} · 情报摘要 · ${new Date().toLocaleDateString("zh-CN")}`;
+
+      // Send notification (platform notification for now, email API can be added later)
+      await notifyOwner({
+        title: `📡 ${title}`,
+        content: `**订阅者邮箱**: ${sub.email}\n**关注关键词**: ${keywords.join("、") || "全部"}\n\n${digestContent}`,
+      });
+
+      // Update lastSentAt
+      await db.update(standSubscriptions)
+        .set({ lastSentAt: new Date() } as any)
+        .where(eq(standSubscriptions.id, sub.id));
+
+    } catch (err) {
+      console.error(`[RSS] Failed to send digest to ${sub.email}:`, err);
+    }
+  }
+}
+
+/**
+ * Run RSS digests for all stands with active subscriptions
+ * Called by the scheduler daily
+ */
+export async function runAllRssDigests(): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  const activeSubs = await db.select({ agentRoleId: standSubscriptions.agentRoleId })
+    .from(standSubscriptions)
+    .where(eq(standSubscriptions.isActive, true));
+  const seen = new Set<number>();
+  const uniqueRoleIds: number[] = [];
+  for (const s of activeSubs) {
+    if (!seen.has(s.agentRoleId)) { seen.add(s.agentRoleId); uniqueRoleIds.push(s.agentRoleId); }
+  }
+  console.log(`[RSS] Running digests for ${uniqueRoleIds.length} stands...`);
+  for (const roleId of uniqueRoleIds) {
+    await sendRssDigestForStand(roleId);
+  }
+  console.log(`[RSS] All digests sent.`);
 }

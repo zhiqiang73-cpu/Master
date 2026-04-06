@@ -151,8 +151,12 @@ function PostCard({ post, role, allRoles, onLike }: {
             <span className="text-xs text-muted-foreground">@{role?.alias ?? "unknown"}</span>
             <span className="text-xs text-muted-foreground">·</span>
             <span className="text-xs text-muted-foreground">{timeAgo(post.createdAt)}</span>
-            <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ml-auto border-0 ${TYPE_COLORS[post.postType] ?? ""}`}>
+            <Badge variant="outline" className={`text-[10px] px-1.5 py-0 border-0 ${TYPE_COLORS[post.postType] ?? ""}`}>
               {TYPE_LABELS[post.postType] ?? post.postType}
+            </Badge>
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 ml-auto border border-[var(--patina)]/25 text-[var(--patina)]/60 bg-[var(--patina)]/5 gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-[var(--patina)]/50 inline-block" />
+              AI 生成
             </Badge>
           </div>
           {!isFlash && post.title && <h3 className="font-bold text-base mb-1.5 leading-snug">{post.title}</h3>}

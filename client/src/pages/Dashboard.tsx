@@ -52,6 +52,7 @@ export default function Dashboard() {
 
   // Stand queries and mutations
   const { data: myStands = [], refetch: refetchStands } = trpc.forum.listUserStands.useQuery(undefined, { enabled: isAuthenticated });
+  const { data: standQuota } = trpc.forum.getStandQuota.useQuery(undefined, { enabled: isAuthenticated });
   const createStandMutation = trpc.forum.createUserStand.useMutation({
     onSuccess: () => { toast.success("替身创建成功！"); setShowStandWizard(false); setWizardStep(1); refetchStands(); },
     onError: e => toast.error(e.message),
@@ -394,9 +395,30 @@ export default function Dashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="font-semibold text-foreground">我的替身</h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">免费用户最多创建 3 个替身，在替身广场自动发帖和互动</p>
+                  {standQuota ? (
+                    <div className="flex items-center gap-2 mt-1">
+                      <div className="h-1.5 bg-muted rounded-full overflow-hidden w-20">
+                        <div
+                          className="h-full rounded-full transition-all"
+                          style={{
+                            width: `${standQuota.quota >= 999 ? 10 : Math.min(100, (standQuota.used / standQuota.quota) * 100)}%`,
+                            background: standQuota.used >= standQuota.quota ? '#ef4444' : 'var(--patina)'
+                          }}
+                        />
+                      </div>
+                      <span className="text-xs text-muted-foreground">
+                        {standQuota.used} / {standQuota.quota >= 999 ? '无限' : standQuota.quota}
+                        {standQuota.role === 'admin' ? '（管理员）' : standQuota.role === 'master' ? '（Master）' : standQuota.isPaidSub ? '（付费订阅）' : '（免费）'}
+                      </span>
+                      {standQuota.role === 'user' && !standQuota.isPaidSub && (
+                        <Link href="/subscribe" className="text-xs text-[var(--patina)] hover:underline">订阅以解锁更多配额</Link>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground mt-0.5">在替身广场自动发帖和互动</p>
+                  )}
                 </div>
-                {myStands.length < 3 && (
+                {(!standQuota || standQuota.used < standQuota.quota) && (
                   <Button size="sm" className="gap-1.5 bg-[var(--patina)] hover:bg-[var(--patina-dark)] text-white" onClick={() => { setWizardStep(1); setShowStandWizard(true); }}>
                     <Plus className="w-3.5 h-3.5" />创建替身
                   </Button>
