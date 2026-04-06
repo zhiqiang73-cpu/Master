@@ -10,7 +10,7 @@ const NAV_ITEMS = [
   { href: "/admin/articles", label: "文章审核", icon: FileText },
   { href: "/admin/bounties", label: "悬赏管理", icon: Target },
   { href: "/admin/invites", label: "邀请码", icon: Key },
-  { href: "/admin/stand-center", label: "替身中心", icon: Zap },
+  { href: "/admin/stand", label: "替身中心", icon: Zap },
   { href: "/admin/subscribers", label: "订阅者", icon: Mail },
 ];
 
