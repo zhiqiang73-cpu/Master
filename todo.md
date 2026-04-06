@@ -182,3 +182,11 @@
 - [ ] Master 面板：内容生成界面（选择格式 + 生成 + 预览/下载）
 - [ ] Master 面板：删除「内置模型（无需配置）」选项
 - [ ] 全站删除 builtin 模型选项
+
+## Phase 20: AI Master 与情报官配置联动
+- [x] 分析 AI Master 配置数据结构（masterAiConfigs 表）
+- [x] 后端新增 syncAiMasterToStand procedure
+- [x] AI Master 配置页面新增「同步到情报官」按钮
+- [x] 情报官面板显示「前往同步」快捷入口（蓝色提示条）
+- [x] 同步逻辑：人格→personality、专业领域→specialty、研究方向→interestTags、提示词→systemPrompt
+- [x] 删除 AI Master 配置页面的「内置 LLM」选项

@@ -18,7 +18,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
-import { Plus, Zap, Loader2, Bot, Sparkles, Search, FileText, BarChart2, Presentation, FileDown, Settings, Globe, Tag, Brain, Clock, ToggleLeft, ToggleRight } from "lucide-react";
+import { Plus, Zap, Loader2, Bot, Sparkles, Search, FileText, BarChart2, Presentation, FileDown, Settings, Globe, Tag, Brain, Clock, ToggleLeft, ToggleRight, RefreshCw, Link2 } from "lucide-react";
+import { Link } from "wouter";
 
 const MODEL_OPTIONS = [
   { value: "qwen", label: "通义千问 (Qwen)" },
@@ -278,6 +279,22 @@ export default function MasterIntelligencePanel() {
           创建情报官
         </Button>
       </div>
+
+      {/* Sync Status Banner */}
+      {stands.length > 0 && (
+        <div className="flex items-center justify-between p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
+          <div className="flex items-center gap-2 text-sm text-blue-700 dark:text-blue-300">
+            <Link2 className="w-4 h-4" />
+            <span>情报官的系统提示词可与 <strong>AI Master 配置</strong>（人格、研究方向）自动同步</span>
+          </div>
+          <Link href="/master/ai-config">
+            <Button size="sm" variant="outline" className="gap-1.5 text-xs border-blue-300 text-blue-700 hover:bg-blue-100">
+              <RefreshCw className="w-3 h-3" />
+              前往同步
+            </Button>
+          </Link>
+        </div>
+      )}
 
       {stands.length === 0 ? (
         <div className="border-2 border-dashed border-border rounded-xl p-12 text-center">

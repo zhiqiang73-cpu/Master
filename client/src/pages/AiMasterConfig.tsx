@@ -23,19 +23,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Bot, Key, Cpu, BookOpen, Settings, Plus, X, Zap, Globe } from "lucide-react";
+import { Bot, Key, Cpu, BookOpen, Settings, Plus, X, Zap, Globe, RefreshCw, CheckCircle2 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 
 const MODEL_PROVIDERS = [
-  {
-    value: "builtin",
-    label: "Manus 内置 LLM",
-    description: "无需配置，开箱即用",
-    icon: "🤖",
-    models: ["默认模型"],
-    requiresKey: false,
-  },
   {
     value: "qwen",
     label: "阿里通义千问",
@@ -135,7 +127,7 @@ export default function AiMasterConfig() {
   const { user, isAuthenticated } = useAuth();
   const [topics, setTopics] = useState<string[]>([]);
   const [newTopic, setNewTopic] = useState("");
-  const [selectedProvider, setSelectedProvider] = useState("builtin");
+  const [selectedProvider, setSelectedProvider] = useState("qwen");
   const [selectedModel, setSelectedModel] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [apiEndpoint, setApiEndpoint] = useState("");
@@ -154,9 +146,14 @@ export default function AiMasterConfig() {
     onError: (err) => toast.error("保存失败：" + err.message),
   });
 
+  const syncMutation = trpc.aiConfig.syncToStand.useMutation({
+    onSuccess: (data) => toast.success(data.message),
+    onError: (err) => toast.error("同步失败：" + err.message),
+  });
+
   useEffect(() => {
     if (config) {
-      setSelectedProvider(config.modelProvider ?? "builtin");
+      setSelectedProvider(config.modelProvider === "builtin" ? "qwen" : (config.modelProvider ?? "qwen"));
       setSelectedModel(config.modelName ?? "");
       setApiKey(config.apiKey ?? "");
       setApiEndpoint(config.apiEndpoint ?? "");
@@ -552,14 +549,32 @@ export default function AiMasterConfig() {
         </Tabs>
 
         {/* Save Button */}
-        <div className="flex justify-end gap-3 mt-6 pt-6 border-t border-border">
-          <Button
-            onClick={handleSave}
-            disabled={saveMutation.isPending}
-            className="bg-[var(--patina)] hover:bg-[var(--patina-dark)] text-white"
-          >
-            {saveMutation.isPending ? "保存中..." : "保存配置"}
-          </Button>
+        <div className="flex flex-col sm:flex-row justify-between gap-3 mt-6 pt-6 border-t border-border">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Bot className="w-4 h-4 text-[var(--patina)]" />
+            <span>保存配置后，点击「同步到情报官」将身份设定自动写入所有情报官的系统提示词</span>
+          </div>
+          <div className="flex gap-3">
+            <Button
+              variant="outline"
+              onClick={() => syncMutation.mutate()}
+              disabled={syncMutation.isPending || saveMutation.isPending}
+              className="gap-2"
+            >
+              {syncMutation.isPending ? (
+                <><RefreshCw className="w-4 h-4 animate-spin" />同步中...</>
+              ) : (
+                <><RefreshCw className="w-4 h-4" />同步到情报官</>
+              )}
+            </Button>
+            <Button
+              onClick={handleSave}
+              disabled={saveMutation.isPending}
+              className="bg-[var(--patina)] hover:bg-[var(--patina-dark)] text-white"
+            >
+              {saveMutation.isPending ? "保存中..." : "保存配置"}
+            </Button>
+          </div>
         </div>
       </div>
       <Footer />

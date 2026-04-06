@@ -1246,6 +1246,60 @@ export const appRouter = router({
         }
         return { success: true };
       }),
+    // Sync AI Master identity to all of the master's stands (intelligence officers)
+    syncToStand: protectedProcedure
+      .mutation(async ({ ctx }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        const master = await getMasterByUserId(ctx.user.id);
+        if (!master) throw new TRPCError({ code: "FORBIDDEN", message: "需要 Master 身份" });
+        // Get AI Master config
+        const [aiConfig] = await db.select().from(aiMasterConfigs)
+          .where(eq(aiMasterConfigs.masterId, master.id)).limit(1);
+        if (!aiConfig) throw new TRPCError({ code: "NOT_FOUND", message: "请先保存 AI Master 配置" });
+        // Get all stands owned by this master
+        const stands = await db.select().from(agentRoles)
+          .where(eq((agentRoles as any).ownerId, master.id));
+        if (stands.length === 0) throw new TRPCError({ code: "NOT_FOUND", message: "还没有情报官，请先创建" });
+        // Build sync data from AI Master config
+        // researchTopics → interestTags
+        // systemPrompt → systemPrompt (prepend identity context)
+        // master.expertise → expertise
+        // master.bio → personality
+        const researchTopics = (aiConfig.researchTopics as string[]) ?? [];
+        const masterExpertise = (master.expertise as string[]) ?? [];
+        // Compose a rich system prompt that merges AI Master identity + original config
+        const identityBlock = [
+          master.bio ? `【人格定义】${master.bio}` : null,
+          master.expertise && masterExpertise.length > 0 ? `【专业领域】${masterExpertise.join("、")}` : null,
+          researchTopics.length > 0 ? `【研究方向】${researchTopics.join("、")}` : null,
+          aiConfig.systemPrompt ? `【行为准则】\n${aiConfig.systemPrompt}` : null,
+        ].filter(Boolean).join("\n\n");
+        const syncedSystemPrompt = identityBlock || aiConfig.systemPrompt || "";
+        // Sync to all stands
+        let syncedCount = 0;
+        for (const stand of stands) {
+          const updatePayload: Record<string, unknown> = {
+            systemPrompt: syncedSystemPrompt,
+            interestTags: researchTopics.length > 0 ? researchTopics : (stand as any).interestTags,
+            expertise: masterExpertise.length > 0 ? masterExpertise : (stand as any).expertise,
+          };
+          // Sync model config if stand doesn't have its own API key
+          if (!(stand as any).apiKey && aiConfig.apiKey) {
+            updatePayload.modelProvider_role = aiConfig.modelProvider;
+            updatePayload.apiKey = aiConfig.apiKey;
+            if (aiConfig.apiEndpoint) updatePayload.apiEndpoint = aiConfig.apiEndpoint;
+            if (aiConfig.modelName) updatePayload.modelName = aiConfig.modelName;
+          }
+          // Sync specialty from master bio
+          if (master.bio && !(stand as any).specialty) {
+            updatePayload.specialty = master.bio.slice(0, 200);
+          }
+          await db.update(agentRoles).set(updatePayload as any).where(eq(agentRoles.id, stand.id));
+          syncedCount++;
+        }
+        return { success: true, syncedCount, message: `已同步到 ${syncedCount} 个情报官` };
+      }),
   }),
   // ─── Agent Forum ─────────────────────────────────────────────────────────────
   forum: router({
